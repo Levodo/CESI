@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  hive-site.xml — Configuration d'Apache Hive / Apache Hive configuration
+  POURQUOI / WHY :
+    1) Dit au Metastore OU stocker son catalogue de tables (ici PostgreSQL).
+    2) Dit a HiveServer2 et a Spark OU joindre ce catalogue (thrift://hive-metastore:9083).
+    1) Tells the Metastore where to store its table catalog (PostgreSQL here).
+    2) Tells HiveServer2 and Spark where to reach that catalog (thrift URI).
+  COMMENT / HOW :
+    Monte dans les conteneurs hive-metastore, hive-server, spark-* et airflow.
+    Mounted into hive-metastore, hive-server, spark-* and airflow containers.
+  VERIFICATION :
+    beeline -u jdbc:hive2://localhost:10000 -e "SHOW DATABASES;" -> bronze_db, silver_db, gold_db
+-->
+<configuration>
+
+  <!-- Catalogue Hive stocke dans PostgreSQL (base "metastore", utilisateur "hive").
+       Hive catalog stored in PostgreSQL ("metastore" database, "hive" user). -->
+  <property>
+    <name>javax.jdo.option.ConnectionURL</name>
+    <value>jdbc:postgresql://postgres:5432/metastore</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionDriverName</name>
+    <value>org.postgresql.Driver</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionUserName</name>
+    <value>hive</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionPassword</name>
+    <value>hive</value><!-- LAB ONLY : mot de passe de demonstration / demo password -->
+  </property>
+
+  <!-- Point d'entree Thrift du Metastore : c'est par la que Spark enregistre
+       ses tables. Le service "hive-metastore" du compose ecoute ici.
+       Metastore Thrift endpoint: how Spark registers its tables. -->
+  <property>
+    <name>hive.metastore.uris</name>
+    <value>thrift://hive-metastore:9083</value>
+  </property>
+
+  <!-- Repertoire "warehouse" : racine des tables geres par Hive dans HDFS.
+       Warehouse directory: root of Hive-managed tables in HDFS. -->
+  <property>
+    <name>hive.metastore.warehouse.dir</name>
+    <value>hdfs://namenode:9000/data/warehouse</value>
+  </property>
+
+  <!-- Le schema de la base metastore est cree par "schematool" (service hive-init),
+       pas automatiquement par Hive. Plus propre et plus sur.
+       Metastore schema created by "schematool" (hive-init service), not auto by Hive. -->
+  <property>
+    <name>datanucleus.schema.autoCreateAll</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.metastore.schema.verification</name>
+    <value>false</value>
+  </property>
+
+  <!--
+    POURQUOI / WHY :
+      Sans cette ligne, HiveServer2 (qui tourne sous "root" dans le conteneur) tente
+      d'agir AU NOM de l'utilisateur beeline ("anonymous") et echoue avec :
+      "User: root is not allowed to impersonate anonymous".
+      doAs=false : HiveServer2 execute les requetes sous son propre compte.
+      C'est la regle standard des environnements de lab. En production multi-utilisateur,
+      on configurerait plutot des regles "hadoop.proxyuser.root.*".
+      Without this line, HiveServer2 (running as "root" in the container) tries to
+      impersonate the beeline user ("anonymous") and fails with the error above.
+      doAs=false makes HiveServer2 run queries as its own account — the standard
+      lab rule. In production, configure "hadoop.proxyuser.root.*" rules instead.
+  -->
+  <property>
+    <name>hive.server2.enable.doAs</name>
+    <value>false</value>
+  </property>
+
+  <!-- Ecoute sur toutes les interfaces (obligatoire dans un conteneur).
+       Listen on all interfaces (mandatory inside a container). -->
+  <property>
+    <name>hive.server2.thrift.bind.host</name>
+    <value>0.0.0.0</value>
+  </property>
+
+  <!-- Repertoire de travail temporaire de Hive (scratch).
+       Hive scratch working directory. -->
+  <property>
+    <name>hive.exec.scratchdir</name>
+    <value>/tmp/hive</value>
+  </property>
+
+</configuration>

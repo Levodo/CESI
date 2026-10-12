@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  hdfs-site.xml — Configuration du stockage HDFS / HDFS storage configuration
+  POURQUOI / WHY :
+    Fixe ou les donnees sont rangees physiquement et a quel niveau de redondance.
+    Un cluster local n'a pas besoin de replication (1 seul DataNode).
+    Defines where data is physically stored and the redundancy level.
+    A local cluster needs no replication (single DataNode).
+  VERIFICATION :
+    hdfs dfsadmin -report  -> "Live datanodes: 1", espace disponible coherent.
+-->
+<configuration>
+
+  <!-- Repertoire des metadonnees du NameNode (noms de fichiers, arborescence).
+       NameNode metadata directory (file names, directory tree). -->
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///hadoop/dfs/name</value>
+  </property>
+
+  <!-- Repertoire des blocs de donnees du DataNode (contenu des fichiers).
+       DataNode block directory (actual file content). -->
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file:///hadoop/dfs/data</value>
+  </property>
+
+  <!-- Replication = 1 : un seul exemplaire des donnees (1 DataNode).
+       Replication = 1: single copy of the data (one DataNode). -->
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+
+  <!-- Permissions desactivees (voir core-site.xml, mode projet uniquement).
+       Permissions disabled (see core-site.xml, project mode only). -->
+  <property>
+    <name>dfs.permissions.enabled</name>
+    <value>false</value>
+  </property>
+
+  <!-- WebHDFS active : permet les verifications via HTTP (curl) et l'UI.
+       WebHDFS enabled: allows HTTP checks (curl) and the web UI. -->
+  <property>
+    <name>dfs.webhdfs.enabled</name>
+    <value>true</value>
+  </property>
+
+</configuration>

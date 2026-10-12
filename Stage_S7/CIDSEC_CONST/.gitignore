@@ -1,0 +1,40 @@
+# =====================================================================
+# CIDSEC_CONST — .gitignore
+# FR: Ce qui ne doit JAMAIS entrer dans Git (données, secrets, artefacts)
+# EN: What must NEVER enter Git (data, secrets, build artifacts)
+# =====================================================================
+
+# FR: Les données réelles ne sont PAS versionnées (trop volumineuses + licence)
+# EN: Real data is NOT versioned (too large + licensing)
+Données/
+landing/
+*.csv
+*.zip
+*.txt
+!requirements.txt
+
+# FR: Secrets et configuration locale — voir .env.example pour le modèle
+# EN: Secrets and local config — see .env.example for the template
+.env
+
+# FR: Python
+# EN: Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# FR: Artefacts d'exécution (logs, sorties locales)
+# EN: Execution artifacts (logs, local outputs)
+*.log
+output/
+.spark-warehouse/
+derby.log
+metastore_db/
+
+# FR: OS / éditeur
+# EN: OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,487 @@
+{
+  "olist": {
+    "olist_customers_dataset.csv": {
+      "fichier": "olist_customers_dataset.csv",
+      "lignes": 99441,
+      "colonnes": [
+        "customer_id",
+        "customer_unique_id",
+        "customer_zip_code_prefix",
+        "customer_city",
+        "customer_state"
+      ],
+      "vides_par_colonne": {
+        "customer_id": 0,
+        "customer_unique_id": 0,
+        "customer_zip_code_prefix": 0,
+        "customer_city": 0,
+        "customer_state": 0
+      },
+      "distincts_par_colonne": {
+        "customer_id": 99441,
+        "customer_unique_id": 96096,
+        "customer_zip_code_prefix": 14994,
+        "customer_city": 4119,
+        "customer_state": 27
+      },
+      "doublons_premiere_colonne": 0,
+      "min": {
+        "customer_zip_code_prefix": 1003.0
+      },
+      "max": {
+        "customer_zip_code_prefix": 99990.0
+      }
+    },
+    "olist_geolocation_dataset.csv": {
+      "fichier": "olist_geolocation_dataset.csv",
+      "lignes": 1000163,
+      "colonnes": [
+        "geolocation_zip_code_prefix",
+        "geolocation_lat",
+        "geolocation_lng",
+        "geolocation_city",
+        "geolocation_state"
+      ],
+      "vides_par_colonne": {
+        "geolocation_zip_code_prefix": 0,
+        "geolocation_lat": 0,
+        "geolocation_lng": 0,
+        "geolocation_city": 0,
+        "geolocation_state": 0
+      },
+      "distincts_par_colonne": {
+        "geolocation_zip_code_prefix": 19015,
+        "geolocation_lat": 717372,
+        "geolocation_lng": 717615,
+        "geolocation_city": 8010,
+        "geolocation_state": 27
+      },
+      "doublons_premiere_colonne": 17972,
+      "min": {
+        "geolocation_zip_code_prefix": 1001.0,
+        "geolocation_lat": -36.6053744107061,
+        "geolocation_lng": -101.46676644931476
+      },
+      "max": {
+        "geolocation_zip_code_prefix": 99990.0,
+        "geolocation_lat": 45.06593318269697,
+        "geolocation_lng": 121.10539381057764
+      }
+    },
+    "olist_order_items_dataset.csv": {
+      "fichier": "olist_order_items_dataset.csv",
+      "lignes": 112650,
+      "colonnes": [
+        "order_id",
+        "order_item_id",
+        "product_id",
+        "seller_id",
+        "shipping_limit_date",
+        "price",
+        "freight_value"
+      ],
+      "vides_par_colonne": {
+        "order_id": 0,
+        "order_item_id": 0,
+        "product_id": 0,
+        "seller_id": 0,
+        "shipping_limit_date": 0,
+        "price": 0,
+        "freight_value": 0
+      },
+      "distincts_par_colonne": {
+        "order_id": 98666,
+        "order_item_id": 21,
+        "product_id": 32951,
+        "seller_id": 3095,
+        "shipping_limit_date": 93318,
+        "price": 5968,
+        "freight_value": 6999
+      },
+      "doublons_premiere_colonne": 9803,
+      "min": {
+        "shipping_limit_date": "2016-09-19 00:15:34",
+        "price": 0.85,
+        "freight_value": 0.0
+      },
+      "max": {
+        "shipping_limit_date": "2020-04-09 22:35:08",
+        "price": 6735.0,
+        "freight_value": 409.68
+      }
+    },
+    "olist_order_payments_dataset.csv": {
+      "fichier": "olist_order_payments_dataset.csv",
+      "lignes": 103886,
+      "colonnes": [
+        "order_id",
+        "payment_sequential",
+        "payment_type",
+        "payment_installments",
+        "payment_value"
+      ],
+      "vides_par_colonne": {
+        "order_id": 0,
+        "payment_sequential": 0,
+        "payment_type": 0,
+        "payment_installments": 0,
+        "payment_value": 0
+      },
+      "distincts_par_colonne": {
+        "order_id": 99440,
+        "payment_sequential": 29,
+        "payment_type": 5,
+        "payment_installments": 24,
+        "payment_value": 29077
+      },
+      "doublons_premiere_colonne": 2961,
+      "min": {
+        "payment_installments": 0.0,
+        "payment_value": 0.0
+      },
+      "max": {
+        "payment_installments": 24.0,
+        "payment_value": 13664.08
+      }
+    },
+    "olist_order_reviews_dataset.csv": {
+      "fichier": "olist_order_reviews_dataset.csv",
+      "lignes": 99224,
+      "colonnes": [
+        "review_id",
+        "order_id",
+        "review_score",
+        "review_comment_title",
+        "review_comment_message",
+        "review_creation_date",
+        "review_answer_timestamp"
+      ],
+      "vides_par_colonne": {
+        "review_id": 0,
+        "order_id": 0,
+        "review_score": 0,
+        "review_comment_title": 87658,
+        "review_comment_message": 58274,
+        "review_creation_date": 0,
+        "review_answer_timestamp": 0
+      },
+      "distincts_par_colonne": {
+        "review_id": 98410,
+        "order_id": 98673,
+        "review_score": 5,
+        "review_comment_title": 4178,
+        "review_comment_message": 35616,
+        "review_creation_date": 636,
+        "review_answer_timestamp": 98248
+      },
+      "doublons_premiere_colonne": 789,
+      "min": {
+        "review_score": 1.0,
+        "review_creation_date": "2016-10-02 00:00:00",
+        "review_answer_timestamp": "2016-10-07 18:32:28"
+      },
+      "max": {
+        "review_score": 5.0,
+        "review_creation_date": "2018-08-31 00:00:00",
+        "review_answer_timestamp": "2018-10-29 12:27:35"
+      }
+    },
+    "olist_orders_dataset.csv": {
+      "fichier": "olist_orders_dataset.csv",
+      "lignes": 99441,
+      "colonnes": [
+        "order_id",
+        "customer_id",
+        "order_status",
+        "order_purchase_timestamp",
+        "order_approved_at",
+        "order_delivered_carrier_date",
+        "order_delivered_customer_date",
+        "order_estimated_delivery_date"
+      ],
+      "vides_par_colonne": {
+        "order_id": 0,
+        "customer_id": 0,
+        "order_status": 0,
+        "order_purchase_timestamp": 0,
+        "order_approved_at": 160,
+        "order_delivered_carrier_date": 1783,
+        "order_delivered_customer_date": 2965,
+        "order_estimated_delivery_date": 0
+      },
+      "distincts_par_colonne": {
+        "order_id": 99441,
+        "customer_id": 99441,
+        "order_status": 8,
+        "order_purchase_timestamp": 98875,
+        "order_approved_at": 90733,
+        "order_delivered_carrier_date": 81018,
+        "order_delivered_customer_date": 95664,
+        "order_estimated_delivery_date": 459
+      },
+      "doublons_premiere_colonne": 0,
+      "min": {
+        "order_purchase_timestamp": "2016-09-04 21:15:19",
+        "order_delivered_carrier_date": "2016-10-08 10:34:01",
+        "order_delivered_customer_date": "2016-10-11 13:46:32",
+        "order_estimated_delivery_date": "2016-09-30 00:00:00"
+      },
+      "max": {
+        "order_purchase_timestamp": "2018-10-17 17:30:18",
+        "order_delivered_carrier_date": "2018-09-11 19:48:28",
+        "order_delivered_customer_date": "2018-10-17 13:22:46",
+        "order_estimated_delivery_date": "2018-11-12 00:00:00"
+      }
+    },
+    "olist_products_dataset.csv": {
+      "fichier": "olist_products_dataset.csv",
+      "lignes": 32951,
+      "colonnes": [
+        "product_id",
+        "product_category_name",
+        "product_name_lenght",
+        "product_description_lenght",
+        "product_photos_qty",
+        "product_weight_g",
+        "product_length_cm",
+        "product_height_cm",
+        "product_width_cm"
+      ],
+      "vides_par_colonne": {
+        "product_id": 0,
+        "product_category_name": 610,
+        "product_name_lenght": 610,
+        "product_description_lenght": 610,
+        "product_photos_qty": 610,
+        "product_weight_g": 2,
+        "product_length_cm": 2,
+        "product_height_cm": 2,
+        "product_width_cm": 2
+      },
+      "distincts_par_colonne": {
+        "product_id": 32951,
+        "product_category_name": 73,
+        "product_name_lenght": 66,
+        "product_description_lenght": 2960,
+        "product_photos_qty": 19,
+        "product_weight_g": 2204,
+        "product_length_cm": 99,
+        "product_height_cm": 102,
+        "product_width_cm": 95
+      },
+      "doublons_premiere_colonne": 0,
+      "min": {
+        "product_name_lenght": 5.0,
+        "product_description_lenght": 4.0,
+        "product_photos_qty": 1.0,
+        "product_weight_g": 0.0,
+        "product_length_cm": 7.0,
+        "product_height_cm": 2.0,
+        "product_width_cm": 6.0
+      },
+      "max": {
+        "product_name_lenght": 76.0,
+        "product_description_lenght": 3992.0,
+        "product_photos_qty": 20.0,
+        "product_weight_g": 40425.0,
+        "product_length_cm": 105.0,
+        "product_height_cm": 105.0,
+        "product_width_cm": 118.0
+      }
+    },
+    "olist_sellers_dataset.csv": {
+      "fichier": "olist_sellers_dataset.csv",
+      "lignes": 3095,
+      "colonnes": [
+        "seller_id",
+        "seller_zip_code_prefix",
+        "seller_city",
+        "seller_state"
+      ],
+      "vides_par_colonne": {
+        "seller_id": 0,
+        "seller_zip_code_prefix": 0,
+        "seller_city": 0,
+        "seller_state": 0
+      },
+      "distincts_par_colonne": {
+        "seller_id": 3095,
+        "seller_zip_code_prefix": 2246,
+        "seller_city": 611,
+        "seller_state": 23
+      },
+      "doublons_premiere_colonne": 0,
+      "min": {
+        "seller_zip_code_prefix": 1001.0
+      },
+      "max": {
+        "seller_zip_code_prefix": 99730.0
+      }
+    },
+    "product_category_name_translation.csv": {
+      "fichier": "product_category_name_translation.csv",
+      "lignes": 71,
+      "colonnes": [
+        "product_category_name",
+        "product_category_name_english"
+      ],
+      "vides_par_colonne": {
+        "product_category_name": 0,
+        "product_category_name_english": 0
+      },
+      "distincts_par_colonne": {
+        "product_category_name": 71,
+        "product_category_name_english": 71
+      },
+      "doublons_premiere_colonne": 0,
+      "min": {},
+      "max": {}
+    }
+  },
+  "cymbal": {
+    "cymbal_investments_trade_capture_report.csv": {
+      "fichier": "cymbal_investments_trade_capture_report.csv",
+      "lignes": 1222562,
+      "colonnes": [
+        "SendingTime",
+        "TargetCompID",
+        "SenderCompID",
+        "Symbol",
+        "Quantity",
+        "TransactTime",
+        "StrikePrice",
+        "LastPx",
+        "MaturityDate",
+        "TradeReportID",
+        "TradeDate",
+        "CFICode",
+        "Side",
+        "OrderID",
+        "PartyID",
+        "PartyIDSource",
+        "PartyRole"
+      ],
+      "vides_par_colonne": {
+        "SendingTime": 0,
+        "TargetCompID": 0,
+        "SenderCompID": 0,
+        "Symbol": 0,
+        "Quantity": 0,
+        "TransactTime": 0,
+        "StrikePrice": 0,
+        "LastPx": 0,
+        "MaturityDate": 0,
+        "TradeReportID": 0,
+        "TradeDate": 0,
+        "CFICode": 0,
+        "Side": 0,
+        "OrderID": 0,
+        "PartyID": 0,
+        "PartyIDSource": 0,
+        "PartyRole": 0
+      },
+      "distincts_par_colonne": {
+        "SendingTime": 1184843,
+        "TargetCompID": 9,
+        "SenderCompID": 1,
+        "Symbol": 13,
+        "Quantity": 1,
+        "TransactTime": 1222540,
+        "StrikePrice": 33543,
+        "LastPx": 33529,
+        "MaturityDate": 1222540,
+        "TradeReportID": 1222553,
+        "TradeDate": 188,
+        "CFICode": 1,
+        "Side": 2,
+        "OrderID": 1222553,
+        "PartyID": 9,
+        "PartyIDSource": 1,
+        "PartyRole": 1
+      },
+      "doublons_premiere_colonne": 37038,
+      "min": {
+        "SendingTime": "2020-05-18 17:20:41+00:00",
+        "Quantity": 1.0,
+        "TransactTime": "2020-05-18 17:20:46.944000+00:00",
+        "StrikePrice": 2904.625,
+        "LastPx": 2904.875,
+        "MaturityDate": "2020-05-18 17:21:46.944000+00:00",
+        "TradeDate": "2020-05-18"
+      },
+      "max": {
+        "SendingTime": "2020-11-23 22:55:47+00:00",
+        "Quantity": 1.0,
+        "TransactTime": "2020-11-23 22:55:47.448000+00:00",
+        "StrikePrice": 19065.0,
+        "LastPx": 19050.0,
+        "MaturityDate": "2020-11-23 22:56:47.448000+00:00",
+        "TradeDate": "2020-11-23"
+      }
+    }
+  },
+  "integrite_referentielle": {
+    "orders.customer_id -> customers.customer_id": {
+      "cles_enfant": 99441,
+      "orphelines": 0,
+      "exemple_orpheline": []
+    },
+    "order_items.order_id -> orders.order_id": {
+      "cles_enfant": 98666,
+      "orphelines": 0,
+      "exemple_orpheline": []
+    },
+    "payments.order_id -> orders.order_id": {
+      "cles_enfant": 99440,
+      "orphelines": 0,
+      "exemple_orpheline": []
+    },
+    "reviews.order_id -> orders.order_id": {
+      "cles_enfant": 98673,
+      "orphelines": 0,
+      "exemple_orpheline": []
+    },
+    "order_items.product_id -> products.product_id": {
+      "cles_enfant": 32951,
+      "orphelines": 0,
+      "exemple_orpheline": []
+    },
+    "order_items.seller_id -> sellers.seller_id": {
+      "cles_enfant": 3095,
+      "orphelines": 0,
+      "exemple_orpheline": []
+    },
+    "products.categorie -> translation.categorie": {
+      "cles_enfant": 73,
+      "orphelines": 73,
+      "exemple_orpheline": [
+        "portateis_casa_forno_e_cafe",
+        "construcao_ferramentas_ferramentas",
+        "casa_conforto_2"
+      ]
+    }
+  },
+  "categories_sans_traduction": [
+    "agro_industria_e_comercio",
+    "alimentos",
+    "alimentos_bebidas",
+    "artes",
+    "artes_e_artesanato",
+    "artigos_de_festas",
+    "artigos_de_natal",
+    "audio",
+    "automotivo",
+    "bebes",
+    "bebidas",
+    "beleza_saude",
+    "brinquedos",
+    "cama_mesa_banho",
+    "casa_conforto",
+    "casa_conforto_2",
+    "casa_construcao",
+    "cds_dvds_musicais",
+    "cine_foto",
+    "climatizacao"
+  ],
+  "nb_categories_sans_traduction": 73
+}

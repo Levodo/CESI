@@ -1,0 +1,390 @@
+# =====================================================================================
+# docker-compose.yml — Plateforme Data CIDSEC_CONST
+# Projet : pipeline Medallion (Bronze/Silver/Gold) + Analytics IA
+#
+# POURQUOI / WHY :
+#   Docker Compose permet de lancer TOUTE la plateforme (HDFS, Hive, Spark, Airflow,
+#   PostgreSQL) avec UNE seule commande, de façon identique sur toutes les machines.
+#   C'est la garantie que "ça marche sur ma machine" = "ça marche partout".
+#   Docker Compose lets us start the WHOLE platform (HDFS, Hive, Spark, Airflow,
+#   PostgreSQL) with ONE command, identically on every machine.
+#
+# COMMENT / HOW :
+#   1. Copier .env.example vers .env (voir le guide d'installation, docs/04).
+#   2. docker compose up -d
+#   3. Vérifier : docker compose ps  (tous les services doivent être "healthy"/"running")
+#
+# VERIFICATION :
+#   - Airflow      : http://localhost:8180  (admin / admin)
+#       NOTE : le port 8180 et non 8080 — un logiciel local (EDB/EnterpriseDB)
+#       occupe deja le 8080 sur cette machine (conflit verifie le 06/10/2026).
+#       NOTE: port 8180 not 8080 — a local EDB/EnterpriseDB tool already owns
+#       port 8080 on this machine (conflict verified 2026-10-06).
+#   - Spark Master : http://localhost:8081
+#   - HDFS NameNode: http://localhost:9870
+#   - HiveServer2  : jdbc:hive2://localhost:10000 (beeline)
+#   - Adminer (BDD): http://localhost:8083
+# =====================================================================================
+
+# Pas de 'version:' : obsolète dans Compose V2 (affiche un warning inutile).
+# No 'version:' key: obsolete in Compose V2 (only produces a useless warning).
+
+services:
+
+  # -----------------------------------------------------------------------------------
+  # 1. PostgreSQL — 3 bases : metastore Hive, metadonnees Airflow, couche de service Gold
+  #    PostgreSQL — 3 databases: Hive metastore, Airflow metadata, Gold serving layer
+  # POURQUOI : Hive a besoin d'une BDD pour son catalogue ; Airflow pour ses DAGs/runs ;
+  #            Power BI lit la couche Gold ici (Spark ecrit via JDBC).
+  # -----------------------------------------------------------------------------------
+  postgres:
+    image: postgres:13                     # Version epinglee / Pinned version
+    container_name: cidsec-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres          # LAB ONLY — remplacer en production / lab only
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"                        # Connexion Power BI + outils depuis l'hote / host access
+    volumes:
+      - pgdata:/var/lib/postgresql/data                    # Donnees persistees / persistent data
+      - ./postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro  # Creation des bases au 1er demarrage
+    healthcheck:                           # Airflow/Hive attendent que Postgres soit pret
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # -----------------------------------------------------------------------------------
+  # 2. HDFS — NameNode (cerveau) + DataNode (stockage)
+  # POURQUOI : HDFS est le "Data Lake" distribue : il stocke les fichiers Parquet
+  #            des couches Bronze/Silver/Gold. Replication=1 suffit en mode local.
+  #            HDFS is the distributed Data Lake storing Parquet files of all layers.
+  # -----------------------------------------------------------------------------------
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: cidsec-namenode
+    restart: unless-stopped
+    environment:
+      CLUSTER_NAME: cidsec                 # Nom du cluster HDFS / HDFS cluster name
+      # Configuration Hadoop passee par variables (convention des images bde2020)
+      # Hadoop config via env vars (bde2020 image convention)
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: "1"
+      HDFS_CONF_dfs_permissions_enabled: "false"   # Simplicite pédagogique / teaching simplicity
+    ports:
+      - "9870:9870"                        # Web UI NameNode
+      - "9000:9000"                        # RPC HDFS (hdfs dfs / accès externe)
+    volumes:
+      - namenode_data:/hadoop/dfs/name     # Metadonnees HDFS persistees
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro   # Config explicite (double filet)
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro   # Explicit config (belt & braces)
+      - ../Données:/landing:ro             # Sources locales en lecture seule / read-only raw sources
+      - ./data/landing_api:/landing_api:ro # Reponses API capturees par Airflow
+      - ./scripts/init-hdfs.sh:/scripts/init-hdfs.sh:ro
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: cidsec-datanode
+    restart: unless-stopped
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: "1"
+      HDFS_CONF_dfs_permissions_enabled: "false"
+    depends_on:
+      - namenode
+    volumes:
+      - datanode_data:/hadoop/dfs/data     # Blocs de donnees persistes
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+
+  # Initialisation HDFS : creation de l'arborescence /data + copie d'archive des sources
+  # One-shot: creates /data tree + archives raw sources. Rejouable sans risque (idempotent).
+  hdfs-init:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: cidsec-hdfs-init
+    restart: "no"                          # S'arrete apres execution / stops after run
+    depends_on:
+      - namenode
+      - datanode
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: "1"
+      HDFS_CONF_dfs_permissions_enabled: "false"
+    volumes:
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ../Données:/landing:ro
+      - ./data/landing_api:/landing_api:ro
+      - ./scripts/init-hdfs.sh:/scripts/init-hdfs.sh:ro
+    command: ["bash", "/scripts/init-hdfs.sh"]
+
+  # -----------------------------------------------------------------------------------
+  # 3. Apache Hive — Metastore (catalogue) + Server2 (SQL via beeline)
+  # POURQUOI : Hive donne un nom de table SQL aux fichiers Parquet de HDFS.
+  #            Sans lui, chaque fichier reste un chemin opaque.
+  #            Hive gives SQL table names to HDFS Parquet files (the data catalog).
+  # -----------------------------------------------------------------------------------
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: cidsec-hive-metastore
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # FR: le schéma du catalogue DOIT exister avant le metastore (sinon crash-loop).
+      # EN: the catalog schema MUST exist before the metastore (else crash-loop).
+      hive-init:
+        condition: service_completed_successfully
+    environment:
+      # Connexion du catalogue Hive a PostgreSQL (base 'metastore')
+      # Hive catalog backed by PostgreSQL
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://postgres:5432/metastore
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionDriverName: org.postgresql.Driver
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionUserName: hive
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionPassword: hive                # LAB ONLY
+      HIVE_SITE_CONF_hive_metastore_uris: thrift://hive-metastore:9083
+      HIVE_SITE_CONF_hive_metastore_schema_verification: "false"
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    volumes:
+      - ./hive/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+    command: ["/opt/hive/bin/hive", "--service", "metastore"]
+    ports:
+      - "9083:9083"                        # API Metastore (utilisee par Spark)
+
+  # Creation du schema du catalogue Hive (UNE seule fois) / Hive catalog schema init (once)
+  hive-init:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: cidsec-hive-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://postgres:5432/metastore
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionDriverName: org.postgresql.Driver
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionUserName: hive
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionPassword: hive
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    volumes:
+      - ./hive/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./scripts/hive-init-schema.sh:/scripts/hive-init-schema.sh:ro
+    # POURQUOI : le /entrypoint.sh de l'image se termine par `exec $@` NON QUOTE :
+    #   une commande contenant des espaces ("bash -c '... -initSchema'") est decoupee
+    #   et schematool reçoit 0 argument -> "Parsing failed: Missing required option".
+    #   On passe donc par un script fichier, dont chaque argument est sans espace.
+    # WHY: the image's /entrypoint.sh ends with an UNQUOTED `exec $@`: a command with
+    #   spaces is word-split and schematool receives 0 arguments. We therefore use a
+    #   script file, whose arguments contain no spaces.
+    # Idempotent : init seulement si le schema est absent (cf. le script, bilingue).
+    # Idempotent: initializes only if the schema is missing (see the bilingual script).
+    command: ["bash", "/scripts/hive-init-schema.sh"]
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: cidsec-hive-server
+    restart: unless-stopped
+    depends_on:
+      - hive-metastore
+    environment:
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://postgres:5432/metastore
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionDriverName: org.postgresql.Driver
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionUserName: hive
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionPassword: hive
+      HIVE_SITE_CONF_hive_metastore_uris: thrift://hive-metastore:9083
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    volumes:
+      - ./hive/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ..:/opt/project:ro                  # Scripts SQL du projet / project SQL scripts
+    command: ["/opt/hive/bin/hiveserver2"]
+    ports:
+      - "10000:10000"                      # JDBC beeline
+      - "10002:10002"                      # Web UI HiveServer2
+
+  # -----------------------------------------------------------------------------------
+  # 4. Apache Spark — Master (planificateur) + Worker (calcul)
+  # POURQUOI : Spark execute tous les jobs de transformation (PySpark) et ecrit
+  #            dans HDFS (Bronze/Silver/Gold) et PostgreSQL (JDBC).
+  #            Spark runs all transformation jobs and writes to HDFS + PostgreSQL.
+  # -----------------------------------------------------------------------------------
+  spark-master:
+    image: bde2020/spark-master:3.3.0-hadoop3.3   # Spark 3.3 = 1re version supportant Java 17
+    container_name: cidsec-spark-master
+    restart: unless-stopped
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000   # Acces HDFS depuis Spark
+      SPARK_MASTER_HOST: spark-master
+    volumes:
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./hive/hive-site.xml:/opt/spark/conf/hive-site.xml:ro   # Pour ecrire des tables Hive
+      - ./jars:/opt/spark/jars:ro            # Pilote JDBC PostgreSQL
+      - ..:/opt/project:ro                   # Jobs PySpark + scripts d'ingestion
+    ports:
+      - "7077:7077"                        # Point d'entree des jobs (spark-submit)
+      - "8081:8080"                        # Web UI Master (decalee : 8180 = Airflow)
+
+  spark-worker:
+    image: bde2020/spark-worker:3.3.0-hadoop3.3   # meme version que le master
+    container_name: cidsec-spark-worker
+    restart: unless-stopped
+    depends_on:
+      - spark-master
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      SPARK_MASTER: spark://spark-master:7077
+    volumes:
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./hive/hive-site.xml:/opt/spark/conf/hive-site.xml:ro
+      - ./jars:/opt/spark/jars:ro
+      - ..:/opt/project:ro
+      # POURQUOI / WHY : en mode client, le DRIVER tourne dans Airflow mais les
+      #   TACHES de lecture tournent sur les EXECUTEURS (ce conteneur). Sans ces
+      #   montages, les executeurs ne voient pas les sources :
+      #   "Path does not exist" alors que le fichier existe.
+      #   In client mode the DRIVER runs in Airflow but READ TASKS run on the
+      #   EXECUTORS (this container). Without these mounts, executors cannot see
+      #   the sources: "Path does not exist" although the file exists.
+      - ../Données:/landing:ro
+      - ./data/landing_api:/landing_api:ro
+    ports:
+      - "8082:8081"                        # Web UI Worker
+
+  # -----------------------------------------------------------------------------------
+  # 5. Apache Airflow — orchestration (image construite localement : +Java +PySpark)
+  # POURQUOI : Airflow planifie, ordonne, supervise et alerte sur tous les jobs.
+  #            Il a besoin de Java + PySpark pour soumettre les jobs au cluster Spark.
+  #            Airflow schedules, orders, monitors and alerts on all jobs.
+  # -----------------------------------------------------------------------------------
+  airflow-init:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    image: cidsec-airflow:2.10.4            # Meme image pour init/webserver/scheduler
+    container_name: cidsec-airflow-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__FERNET_KEY: ""
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      SPARK_CONF_DIR: /opt/spark/conf
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      LANDING_API_DIR: /landing_api
+    volumes:
+      - ..:/opt/project:ro
+      - ../Données:/landing:ro
+      - ./data/landing_api:/landing_api
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./hive/hive-site.xml:/opt/spark/conf/hive-site.xml:ro
+      - ./jars:/opt/spark/jars:ro
+      - ./dags_init:/opt/airflow/dags:ro    # Vide au demarrage : les DAGs arrivent ensuite
+    # Initialisation : base Airflow + connexion Spark + utilisateur admin (idempotent)
+    # Init: Airflow DB + Spark connection + admin user (idempotent)
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate
+        airflow connections add 'spark_default' --conn-type 'spark' --conn-host 'spark://spark-master' --conn-port 7077 || true
+        airflow users create --username admin --password admin --firstname Admin --lastname CIDSEC --role Admin --email admin@cidsec.local || true
+        echo "=== Airflow initialise / Airflow initialized ==="
+
+  airflow-webserver:
+    image: cidsec-airflow:2.10.4
+    container_name: cidsec-airflow-web
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__FERNET_KEY: ""
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      SPARK_CONF_DIR: /opt/spark/conf
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      LANDING_API_DIR: /landing_api
+    volumes:
+      - ../dags:/opt/airflow/dags:ro        # DAGs du projet montes en direct
+      - ../spark_jobs:/opt/project/spark_jobs:ro
+      - ../ingestion:/opt/project/ingestion:ro
+      - ../sql:/opt/project/sql:ro
+      - ../data_quality:/opt/project/data_quality:ro
+      - ../Données:/landing:ro
+      - ./data/landing_api:/landing_api
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./hive/hive-site.xml:/opt/spark/conf/hive-site.xml:ro
+      - ./jars:/opt/spark/jars:ro
+    ports:
+      - "8180:8080"                        # Web UI Airflow (8080 pris par un logiciel EDB local)
+    command: ["airflow", "webserver"]
+
+  airflow-scheduler:
+    image: cidsec-airflow:2.10.4
+    container_name: cidsec-airflow-sched
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__FERNET_KEY: ""
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      SPARK_CONF_DIR: /opt/spark/conf
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      LANDING_API_DIR: /landing_api
+    volumes:
+      - ../dags:/opt/airflow/dags:ro
+      - ../spark_jobs:/opt/project/spark_jobs:ro
+      - ../ingestion:/opt/project/ingestion:ro
+      - ../sql:/opt/project/sql:ro
+      - ../data_quality:/opt/project/data_quality:ro
+      - ../Données:/landing:ro
+      - ./data/landing_api:/landing_api
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./hive/hive-site.xml:/opt/spark/conf/hive-site.xml:ro
+      - ./jars:/opt/spark/jars:ro
+    command: ["airflow", "scheduler"]
+
+  # -----------------------------------------------------------------------------------
+  # 6. Adminer — exploration des bases PostgreSQL depuis un navigateur (outil d'aide)
+  #    Adminer — browse PostgreSQL databases from a browser (helper tool)
+  # -----------------------------------------------------------------------------------
+  adminer:
+    image: adminer:4
+    container_name: cidsec-adminer
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8083:8080"
+
+volumes:
+  pgdata:            # Donnees PostgreSQL
+  namenode_data:     # Metadonnees HDFS (nom des fichiers)
+  datanode_data:     # Blocs HDFS (contenu des fichiers)

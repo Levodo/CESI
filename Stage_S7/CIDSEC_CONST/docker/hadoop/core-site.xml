@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  core-site.xml — Configuration generale Hadoop / General Hadoop configuration
+  POURQUOI / WHY :
+    Indique a TOUT client Hadoop (Spark, Hive, Airflow) ou se trouve le NameNode :
+    c'est LE point d'entree du Data Lake.
+    Tells EVERY Hadoop client (Spark, Hive, Airflow) where the NameNode is:
+    the single entry point of the Data Lake.
+  COMMENT / HOW :
+    Monte ce fichier dans chaque conteneur via docker-compose.yml.
+    Mounted into every container via docker-compose.yml.
+  VERIFICATION :
+    hdfs dfs -ls /  doit lister la racine du lac (depuis namenode ou hdfs-init).
+-->
+<configuration>
+
+  <!-- Adresse du NameNode : protocole HDFS, host "namenode" (DNS interne Docker), port 9000 (RPC).
+       NameNode address: hdfs protocol, Docker-internal DNS name, RPC port 9000. -->
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://namenode:9000</value>
+  </property>
+
+  <!-- Repertoire temporaire Hadoop (dans le conteneur).
+       Hadoop temp directory (inside the container). -->
+  <property>
+    <name>hadoop.tmp.dir</name>
+    <value>/hadoop/tmp</value>
+  </property>
+
+  <!-- Desactive les permissions POSIX : en mode projet, on evite les problemes
+       de droits entre conteneurs. NE JAMAIS FAIRE EN PRODUCTION.
+       Disables POSIX permissions: avoids user-rights issues between containers.
+       NEVER DO THIS IN PRODUCTION. -->
+  <property>
+    <name>hadoop.security.authorization</name>
+    <value>false</value>
+  </property>
+
+</configuration>
