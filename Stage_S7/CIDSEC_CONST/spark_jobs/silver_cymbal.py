@@ -31,7 +31,8 @@ sys.path.insert(0, "/opt/project/spark_jobs")
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 
-from common import (CONFIG, ensure_databases, get_spark, write_table)
+from common import (CONFIG, ensure_databases, get_spark, read_latest_snapshot,
+                    write_table)
 
 DST = CONFIG["db_silver"]
 SRC = CONFIG["db_bronze"]
@@ -45,7 +46,15 @@ def main():
     ensure_databases(spark, [DST])
     print("[silver] === regles Cymbal : A10, A11, A13 (cf. docs/01) ===")
 
-    df = spark.table(f"{SRC}.cymbal_investments_trade_capture_report")
+    # POURQUOI read_latest_snapshot : la table Bronze contient PLUSIEURS snapshots
+    #            d'epoques differentes (dont des ecritures interrompues pendant les
+    #            incidents) ; les melanger faisait s'effondrer la deduplication sur des
+    #            ids vides (45 lignes au lieu de 1 222 553, constate le 18/11/2026).
+    #            La Silver ne consomme que le DERNIER etat de la source.
+    # WHY read_latest_snapshot: the Bronze table holds snapshots from different eras
+    #     (including interrupted writes); mixing them collapsed the deduplication on
+    #     empty ids. Silver consumes only the LATEST source state.
+    df = read_latest_snapshot(spark, f"{SRC}.cymbal_investments_trade_capture_report")
 
     # --- A10 : typage / typing ------------------------------------------------------
     df = (df

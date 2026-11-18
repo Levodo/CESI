@@ -35,7 +35,7 @@ from pyspark.sql import Window
 from pyspark.sql import functions as F
 
 from common import (CONFIG, add_technical_columns, ensure_databases, get_spark,
-                    write_table)
+                    read_latest_snapshot, write_table)
 
 DST = CONFIG["db_silver"]
 SRC = CONFIG["db_bronze"]
@@ -69,7 +69,7 @@ def silver_opsd(spark):
     OPSD : 300 colonnes -> table longue pays x heure / 300 columns -> long table country x hour.
     Regles / rules : B1 (trous), B2 (sous-ensemble).
     """
-    cols = spark.table(f"{SRC}.opsd_time_series_60min").columns
+    cols = read_latest_snapshot(spark, f"{SRC}.opsd_time_series_60min").columns
 
     # Version UNION ALL : un SELECT par pays, fusionnes avec unionByName.
     # POURQUOI ne pas utiliser stack() : selon la version de pyspark/Spark, le
@@ -87,7 +87,7 @@ def silver_opsd(spark):
             src_col = _find_col(cols, c, semantic)
             val = f"CAST({src_col} AS DOUBLE)" if src_col else "CAST(NULL AS DOUBLE)"
             exprs.append(f"{val} AS {semantic}")
-        dfs.append(spark.table(f"{SRC}.opsd_time_series_60min").selectExpr(*exprs))
+        dfs.append(read_latest_snapshot(spark, f"{SRC}.opsd_time_series_60min").selectExpr(*exprs))
 
     long_df = dfs[0]
     for d in dfs[1:]:
@@ -117,7 +117,7 @@ def silver_uci(spark):
     UCI : telemetrie minute -> tables 1h et 1j / minute telemetry -> 1h and 1d tables.
     Regles / rules : B6 (format), B7 (lignes incompletes), B8 (agregation).
     """
-    df = spark.table(f"{SRC}.uci_household_power")
+    df = read_latest_snapshot(spark, f"{SRC}.uci_household_power")
 
     # B6 : virgule decimale -> point, puis cast double ; '?' deja devenu NULL en Bronze
     # B6 : decimal comma -> dot, then cast double; '?' already became NULL in Bronze

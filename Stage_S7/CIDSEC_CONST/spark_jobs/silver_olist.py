@@ -30,7 +30,8 @@ sys.path.insert(0, "/opt/project/spark_jobs")
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 
-from common import (CONFIG, ensure_databases, get_spark, write_table)
+from common import (CONFIG, ensure_databases, get_spark, read_latest_snapshot,
+                    write_table)
 
 SRC = CONFIG["db_bronze"]      # bronze_db
 DST = CONFIG["db_silver"]      # silver_db
@@ -45,7 +46,7 @@ def silver_orders(spark):
       A6  : dates de livraison NULL conservees (commandes non livrees, legitime)
       A6+ : calculs metier : delai de livraison reel, retard vs estimation
     """
-    df = spark.table(f"{SRC}.olist_orders_dataset")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_orders_dataset")
 
     ts_cols = ["order_purchase_timestamp", "order_approved_at",
                "order_delivered_carrier_date", "order_delivered_customer_date",
@@ -72,7 +73,7 @@ def silver_order_items(spark):
     Regles / rules :
       A10 : cast prix/fret (texte -> decimal) et shipping_limit_date -> timestamp
     """
-    df = spark.table(f"{SRC}.olist_order_items_dataset")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_order_items_dataset")
     df = (df
           .withColumn("price", F.col("price").cast("decimal(12,2)"))
           .withColumn("freight_value", F.col("freight_value").cast("decimal(12,2)"))
@@ -88,7 +89,7 @@ def silver_payments(spark):
       A10 : cast des montants / cast amounts
       A8  : payment_value = 0 CONSERVE (cas metier "avoir") mais documente
     """
-    df = spark.table(f"{SRC}.olist_order_payments_dataset")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_order_payments_dataset")
     df = (df
           .withColumn("payment_sequential", F.col("payment_sequential").cast("int"))
           .withColumn("payment_installments", F.col("payment_installments").cast("int"))
@@ -106,7 +107,7 @@ def silver_reviews(spark):
             recent review_answer_timestamp (the most "final" one).
       A10 : cast du score et des dates / cast score and dates
     """
-    df = spark.table(f"{SRC}.olist_order_reviews_dataset")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_order_reviews_dataset")
     df = (df
           .withColumn("review_score", F.col("review_score").cast("int"))
           .withColumn("review_creation_date", F.to_timestamp(F.col("review_creation_date")))
@@ -139,8 +140,8 @@ def silver_products(spark):
       A1  : LEFT JOIN traduction + COALESCE : les 2 categories sans traduction
             gardent leur nom portugais plutot que de disparaitre
     """
-    prod = spark.table(f"{SRC}.olist_products_dataset")
-    tr = spark.table(f"{SRC}.product_category_name_translation")
+    prod = read_latest_snapshot(spark, f"{SRC}.olist_products_dataset")
+    tr = read_latest_snapshot(spark, f"{SRC}.product_category_name_translation")
 
     prod = (prod
             .withColumn("product_category_name",
@@ -181,7 +182,7 @@ def silver_geolocation(spark):
             31 out-of-Brazil coordinates removed (bounding box), and the 17,972
             multi-point zip codes are AVERAGED (1 row = 1 zip code).
     """
-    df = spark.table(f"{SRC}.olist_geolocation_dataset")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_geolocation_dataset")
     df = (df
           .withColumn("lat", F.col("geolocation_lat").cast("double"))
           .withColumn("lng", F.col("geolocation_lng").cast("double"))
@@ -203,7 +204,7 @@ def silver_simple(spark, table, casts):
     Tables simples (clients, vendeurs) : trim + cast uniquement / simple tables: trim + cast only.
     Regles / rules : A10 (types) + nettoyage des espaces superflus (trim).
     """
-    df = spark.table(f"{SRC}.{table}")
+    df = read_latest_snapshot(spark, f"{SRC}.{table}")
     for col, typ in casts.items():
         df = df.withColumn(col, F.col(col).cast(typ))
     for col in [c for c in df.columns if df.schema[c].simpleString() == "string"]:
