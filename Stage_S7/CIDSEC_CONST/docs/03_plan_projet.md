@@ -16,7 +16,7 @@ Chaque phase liste ses étapes **réalisables à la main** et le code qu'on prod
 | 0.5 | Initialiser HDFS | `hdfs dfs -mkdir -p /data/{landing,bronze,silver,gold,models,dq}` | Arborescence du lac créée |
 | 0.6 | Initialiser PostgreSQL | `createdb` : `airflow_db`, `hive_metastore`, `gold_db` ; créer les rôles `airflow`, `hive`, `spark`, `powerbi` | Bases et utilisateurs prêts |
 | 0.7 | Charger les données en landing | Décompresser les zips → `hdfs dfs -put` vers `/data/landing/…` | 10 fichiers visibles dans HDFS |
-| 0.8 | Vérification | `docker compose ps`, `hdfs dfs -ls -R /data`, UI Airflow sur `localhost:8180` | ✅ plateforme opérationnelle |
+| 0.8 | Vérification | `docker compose ps`, `hdfs dfs -ls -R /data`, UI Airflow sur `localhost:8280` | ✅ plateforme opérationnelle |
 
 **Livrable** : plateforme démarrable par `docker compose up -d` par n'importe qui.
 

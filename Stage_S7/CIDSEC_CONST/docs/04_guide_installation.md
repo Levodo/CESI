@@ -73,7 +73,7 @@ normal, ce sont des initialisations "une fois". Les autres doivent être `runnin
 Puis tester les UIs dans le navigateur :
 | URL | Attendu |
 |---|---|
-| http://localhost:8180 | Connexion Airflow (admin / admin) — *port 8180 : le 8080 est occupé par un logiciel local EDB* |
+| http://localhost:8280 | Connexion Airflow (admin / admin) — *port 8280 : le 8080 est occupé par un logiciel local EDB* |
 | http://localhost:8081 | Spark Master : "Workers: 1 Alive" |
 | http://localhost:9870 | NameNode HDFS : "Live datanodes: 1" |
 | http://localhost:8083 | Adminer (choisir PostgreSQL, serveur `postgres`) |
@@ -160,7 +160,7 @@ docker exec cidsec-postgres psql -U spark -d gold_db -c "SELECT * FROM gold.kpi_
 **Pourquoi** : une fois la commande manuelle comprise, Airflow l'ordonnance, la
 surveille, la rejoue et alerte — ce qu'aucun script manuel ne fait.
 
-**Comment** : dans http://localhost:8180 → activer les DAGs `dag_01_ingest_bronze`,
+**Comment** : dans http://localhost:8280 → activer les DAGs `dag_01_ingest_bronze`,
 `dag_04_silver_transform`, `dag_05_gold_build` (bouton à gauche) → cliquer
 "Trigger DAG" sur `dag_01_ingest_bronze` pour un premier essai immédiat.
 

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Orchestration Airflow — CIDSEC_CONST</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ing: #fb923c;  --ing-f: rgba(251,146,60,.12);
+    --tra: #34d399;  --tra-f: rgba(52,211,153,.12);
+    --ser: #a78bfa;  --ser-f: rgba(167,139,250,.12);
+    --qua: #fb7185;  --qua-f: rgba(251,113,133,.12);
+    --info:#22d3ee;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'JetBrains Mono',monospace; background:#020617; color:#e2e8f0;
+    padding:28px 22px; background-image:
+      linear-gradient(#1e293b 1px, transparent 1px),
+      linear-gradient(90deg, #1e293b 1px, transparent 1px);
+    background-size:40px 40px;
+  }
+  h1{font-size:17px; letter-spacing:.5px;}
+  h1 .dot{display:inline-block; width:9px; height:9px; border-radius:50%;
+    background:var(--info); margin-right:9px; animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .sub{font-size:10px; color:#94a3b8; margin:6px 0 22px;}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap;}
+  .dag{
+    flex:1 1 240px; min-width:240px; border:1.5px solid var(--ing); border-radius:10px;
+    background:rgba(2,6,23,.9); padding:14px 13px; position:relative;
+  }
+  .dag.tra{border-color:var(--tra)} .dag.ser{border-color:var(--ser)} .dag.qua{border-color:var(--qua)}
+  .dag-name{font-size:11px; font-weight:700; margin-bottom:3px;}
+  .dag-sched{font-size:8px; color:#94a3b8; margin-bottom:10px;}
+  .task{
+    border:1px solid #334155; border-radius:6px; padding:6px 8px; margin:6px 0;
+    font-size:9px; color:#cbd5e1; background:#0f172a;
+  }
+  .task b{color:#f1f5f9; font-weight:600;}
+  .grp{font-size:8px; color:#64748b; margin-top:9px; text-transform:uppercase; letter-spacing:.8px;}
+  .arrow{
+    flex:0 0 44px; display:flex; align-items:center; justify-content:center;
+    color:#475569; font-size:19px;
+  }
+  .badge{
+    position:absolute; top:-10px; right:10px; font-size:8px; font-weight:700;
+    padding:3px 9px; border-radius:20px; letter-spacing:.6px;
+  }
+  .b-ok{background:rgba(52,211,153,.18); color:#34d399; border:1px solid #34d399;}
+  .b-ko{background:rgba(251,113,133,.18); color:#fb7185; border:1px solid #fb7185;}
+  .b-wt{background:rgba(148,163,184,.15); color:#94a3b8; border:1px solid #64748b;}
+  .b-pause{background:rgba(251,191,36,.15); color:#fbbf24; border:1px solid #fbbf24;}
+
+  .legend{display:flex; gap:16px; flex-wrap:wrap; margin:20px 0 6px; font-size:8px; color:#94a3b8;}
+  .lg{display:flex; align-items:center; gap:6px;}
+  .sw{width:11px; height:11px; border-radius:3px;}
+
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-top:16px;}
+  .card{border:1px solid #1e293b; border-radius:10px; background:rgba(15,23,42,.75); padding:13px;}
+  .card h3{font-size:10px; margin-bottom:8px; color:#f8fafc;}
+  .card h3 .d{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px;}
+  .card li{font-size:8.5px; color:#94a3b8; line-height:1.9; list-style:none;}
+  .card li b{color:#cbd5e1;}
+  footer{margin-top:18px; font-size:7.5px; color:#475569;}
+</style>
+</head>
+<body>
+
+<h1><span class="dot"></span>ORCHESTRATION AIRFLOW — PIPELINE MEDALLION CIDSEC_CONST</h1>
+<div class="sub">4 DAGs chaînés · Airflow 2.10 (LocalExecutor) · http://localhost:8280 — état réel au 13/10/2026</div>
+
+<div class="flow">
+
+  <!-- DAG 01 -->
+  <div class="dag">
+    <div class="badge b-ok">SUCCÈS</div>
+    <div class="badge b-pause" style="right:90px">⏸ EN PAUSE</div>
+    <div class="dag-name" style="color:var(--ing)">dag_01_ingest_bronze</div>
+    <div class="dag-sched">quotidien 02:00 · max_active_tasks=3 · 16 tâches</div>
+    <div class="grp">Appels API (PythonOperator)</div>
+    <div class="task"><b>api_fetch_meteo</b> · <b>api_fetch_fx</b><br>REST → JSON archivé (règle B5)</div>
+    <div class="grp">Chargement Bronze (SparkSubmitOperator)</div>
+    <div class="task"><b>bronze_olist_*</b> — 9 tables<br><b>bronze_cymbal_*</b> · <b>bronze_opsd_*</b> · <b>bronze_uci_*</b><br><b>bronze_api_*</b> — copie fidèle, tout en string</div>
+    <div class="task" style="border-style:dashed">→ HDFS /data/bronze · Hive bronze_db<br>partitions _load_date (idempotent)</div>
+  </div>
+
+  <div class="arrow">➜</div>
+
+  <!-- DAG 04 -->
+  <div class="dag tra">
+    <div class="badge b-ok">SUCCÈS</div>
+    <div class="dag-name" style="color:var(--tra)">dag_04_silver_transform</div>
+    <div class="dag-sched">quotidien 03:30 · max_active_tasks=2 · 5 tâches</div>
+    <div class="grp">Nettoyage (parallèle, sans dépendance)</div>
+    <div class="task"><b>silver_olist</b> — règles A1-A10<br><b>silver_cymbal</b> — A10-A13<br><b>silver_iot</b> — B1,B2,B6-B8<br><b>silver_api</b> — B3,B5</div>
+    <div class="grp">Jeux enrichis (après les 4 ci-dessus)</div>
+    <div class="task"><b>conformed_build</b><br>commandes ⋈ météo · trades ⋈ devises<br>énergie pivot</div>
+  </div>
+
+  <div class="arrow">➜</div>
+
+  <!-- DAG 05 -->
+  <div class="dag ser">
+    <div class="badge b-ko">ÉCHEC</div>
+    <div class="dag-name" style="color:var(--ser)">dag_05_gold_build</div>
+    <div class="dag-sched">quotidien 04:30 · 2 tâches</div>
+    <div class="grp">Modèle en étoile + export</div>
+    <div class="task"><b>gold_build</b> — PySpark<br>dim_date · dim_client · dim_produit<br>dim_vendeur · dim_geographie · dim_pays<br><b>fact_commande</b> · fact_trades<br>fact_energie_jour · fact_foyer_jour<br>kpi_ca_quotidien</div>
+    <div class="task"><b>check_postgres_gold</b><br>vérifie les tables côté PostgreSQL</div>
+    <div class="task" style="border-style:dashed">→ Spark JDBC → PostgreSQL gold_db<br>(seule source lue par Power BI)</div>
+  </div>
+
+  <div class="arrow">➜</div>
+
+  <!-- DAG 06 -->
+  <div class="dag qua">
+    <div class="badge b-wt">EN ATTENTE</div>
+    <div class="dag-name" style="color:var(--qua)">dag_06_data_quality</div>
+    <div class="dag-sched">quotidien 05:00 · 3 tâches</div>
+    <div class="grp">Supervision + alerte</div>
+    <div class="task"><b>ensure_dq_schema</b><br>crée dq.dq_checks (idempotent)</div>
+    <div class="task"><b>run_checks</b> — 6 familles<br>existence · comptage · complétude<br>validité · unicité · intégrité</div>
+    <div class="task"><b>report_failures</b><br>échec du DAG + liste lisible = ALERTE</div>
+    <div class="task" style="border-style:dashed">→ dq.dq_checks (PostgreSQL)<br>→ page « Monitoring qualité » Power BI</div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="lg"><div class="sw" style="background:var(--ing)"></div>Ingestion</div>
+  <div class="lg"><div class="sw" style="background:var(--tra)"></div>Transformation</div>
+  <div class="lg"><div class="sw" style="background:var(--ser)"></div>Stockage / BI</div>
+  <div class="lg"><div class="sw" style="background:var(--qua)"></div>Qualité & alerte</div>
+  <div class="lg"><div class="sw" style="background:#fbbf24"></div>DAG mis en pause (validation)</div>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <h3><span class="d" style="background:var(--info)"></span>Enchaînement & reprise</h3>
+    <ul>
+      <li>• <b>Ordre garanti</b> : 01 → 04 → 05 → 06 (déclenchement manuel ou planning)</li>
+      <li>• <b>Reprise</b> : retries=2, retry_delay=5 min par tâche</li>
+      <li>• <b>Idempotence</b> : ré-exécution = écrasement de la partition du jour</li>
+      <li>• <b>Équivalent à la main</b> documenté dans chaque DAG</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="d" style="background:var(--tra)"></span>Parallélisme maîtrisé</h3>
+    <ul>
+      <li>• <b>max_active_tasks=3</b> (dag_01) : évite la saturation du scheduler</li>
+      <li>• <b>Spark</b> : 4 cœurs max / job (spark.cores.max) — 4 jobs réels en parallèle</li>
+      <li>• Silver : 4 jobs indépendants en parallèle, puis conformed</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="d" style="background:var(--qua)"></span>État actuel (13/10)</h3>
+    <ul>
+      <li>• <b style="color:#34d399">Bronze</b> : ✅ 16/16 — 14 tables (2,6 M lignes)</li>
+      <li>• <b style="color:#34d399">Silver</b> : ✅ 5/5 — 17 tables</li>
+      <li>• <b style="color:#fb7185">Gold</b> : 🔴 correctif en cours (colonne order_id)</li>
+      <li>• <b>Qualité</b> : enchaînement automatique après Gold</li>
+    </ul>
+  </div>
+</div>
+
+<footer>CIDSEC_CONST — Stage S7 · Bertrand EFOGO LEVODO · docs/visuels/orchestration_airflow.html</footer>
+</body>
+</html>

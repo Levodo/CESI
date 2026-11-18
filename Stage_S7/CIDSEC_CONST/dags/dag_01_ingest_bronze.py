@@ -31,7 +31,7 @@ EQUIVALENT A LA MAIN / MANUAL EQUIVALENT (a comprendre et tester avant Airflow) 
       --input /landing/E-Commerce/olist_orders_dataset.csv --sep ,
 
 VERIFICATION :
-  Airflow UI http://localhost:8180 -> DAG "dag_01_ingest_bronze" -> toutes les taches vertes
+  Airflow UI http://localhost:8280 -> DAG "dag_01_ingest_bronze" -> toutes les taches vertes
   beeline -u jdbc:hive2://localhost:10000 -e "SHOW TABLES IN bronze_db;"
 =====================================================================================
 """

@@ -50,7 +50,7 @@ sys.path.insert(0, "/opt/project/spark_jobs")  # "import common" / allows "impor
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
-from common import CONFIG, get_spark
+from common import CONFIG, get_spark, read_latest_snapshot
 
 # Schema des resultats (EXPLICITE : jamais d'inference sur 15 lignes de resultats)
 # Results schema (EXPLICIT: never infer on 15 result rows)
@@ -88,7 +88,7 @@ def check_table(spark, layer, table):
     Checks 1-2 : EXISTENCE + ROW COUNT.
     """
     try:
-        n = spark.table(f"{layer}.{table}").count()
+        n = read_latest_snapshot(spark, f"{layer}.{table}").count()
         record(layer, table, "existence_comptage", n, "> 0", n > 0,
                "la table est interrogeable / table is queryable")
     except Exception as exc:   # table absente = probleme grave mais pas de crash du job
@@ -101,12 +101,16 @@ def check_completeness(spark, layer, table, columns, max_null_rate=0.05):
     Controle 3 : COMPLETUDE (taux de NULL sous le seuil).
     Check 3 : COMPLETENESS (NULL rate under threshold).
     """
-    df = spark.table(f"{layer}.{table}")
+    df = read_latest_snapshot(spark, f"{layer}.{table}")
     n = df.count()
     if n == 0:
         return   # deja signale par le comptage / already flagged by the count check
     for col in columns:
-        nulls = df.filter(F.col(col).isNull()).count()
+        try:
+            nulls = df.filter(F.col(col).isNull()).count()
+        except Exception as exc:
+            record(layer, table, f"completude:{col}", "ERREUR", f"<= {max_null_rate:.0%}", False, str(exc)[:200])
+            continue
         rate = nulls / n
         record(layer, table, f"completude:{col}", f"{rate:.2%} NULL",
                f"<= {max_null_rate:.0%}", rate <= max_null_rate,
@@ -118,8 +122,12 @@ def check_validity(spark, layer, table, column, predicate, expected_label):
     Controle 4 : VALIDITE (une expression SQL doit etre vraie pour toutes les lignes).
     Check 4 : VALIDITY (a SQL expression must hold for every row).
     """
-    df = spark.table(f"{layer}.{table}")
-    invalid = df.filter(f"NOT ({predicate})").count()
+    df = read_latest_snapshot(spark, f"{layer}.{table}")
+    try:
+        invalid = df.filter(f"NOT ({predicate})").count()
+    except Exception as exc:
+        record(layer, table, f"validite:{column}", "ERREUR", f"0 | {expected_label}", False, str(exc)[:200])
+        return
     record(layer, table, f"validite:{column}", f"{invalid} lignes invalides",
            f"0 | {expected_label}", invalid == 0, predicate)
 
@@ -129,9 +137,17 @@ def check_uniqueness(spark, layer, table, key_columns):
     Controle 5 : UNICITE de la cle.
     Check 5 : KEY UNIQUENESS.
     """
-    df = spark.table(f"{layer}.{table}")
-    n = df.count()
-    n_keys = df.select(*key_columns).distinct().count()
+    try:
+        df = read_latest_snapshot(spark, f"{layer}.{table}")
+        n = df.count()
+        n_keys = df.select(*key_columns).distinct().count()
+    except Exception as exc:
+        # POURQUOI : une table absente est un ECHEC a signaler, pas une raison de
+        #            faire planter tout le job de qualite (constate le 12/10/2026).
+        # WHY: a missing table is a FAILURE to report, not a reason to crash the
+        #      whole quality job.
+        record(layer, table, f"unicite:{'+'.join(key_columns)}", "ERREUR", "table interrogeable", False, str(exc)[:200])
+        return
     record(layer, table, f"unicite:{'+'.join(key_columns)}", f"{n_keys} cles distinctes",
            f"= {n} lignes", n_keys == n,
            "tout doublon de cle fausse les agregats / any key duplicate corrupts aggregates")
@@ -142,9 +158,14 @@ def check_referential_integrity(spark, layer, child_table, child_col, parent_tab
     Controle 6 : INTEGRITE REFERENTIELLE (aucune cle orpheline).
     Check 6 : REFERENTIAL INTEGRITY (no orphan key).
     """
-    child = spark.table(f"{layer}.{child_table}").select(child_col).distinct()
-    parent = spark.table(f"{layer}.{parent_table}").select(parent_col).distinct()
-    orphans = child.join(parent, child[child_col] == parent[parent_col], "left_anti").count()
+    child = read_latest_snapshot(spark, f"{layer}.{child_table}").select(child_col).distinct()
+    parent = read_latest_snapshot(spark, f"{layer}.{parent_table}").select(parent_col).distinct()
+    try:
+        orphans = child.join(parent, child[child_col] == parent[parent_col], "left_anti").count()
+    except Exception as exc:
+        record(layer, child_table, f"integrite:{child_col}->{parent_table}.{parent_col}",
+               "ERREUR", "0", False, str(exc)[:200])
+        return
     record(layer, child_table, f"integrite:{child_col}->{parent_table}.{parent_col}",
            f"{orphans} orphelines", "0", orphans == 0,
            "jointures silencieusement perdues / silently lost joins")
@@ -210,21 +231,38 @@ def persist_results(spark):
     l'exploitation. PostgreSQL alimente la page "Monitoring qualite" de Power BI.
     A check whose result is not traced does not exist for operations. PostgreSQL feeds
     the Power BI "Quality monitoring" page.
+
+    POURQUOI psycopg2 et pas l'export JDBC Spark : spark.createDataFrame(depuis une
+    liste Python) fait intervenir des WORKERS PYTHON sur les executeurs, dont la
+    version (3.7 dans l'image du cluster) differe de celle du driver (3.8 dans
+    l'image Airflow) -> "RuntimeError: Python in worker has different version"
+    (constate le 19/10/2026). Le driver tourne DANS le conteneur Airflow qui possede
+    deja psycopg2 : on ecrit directement, sans worker Python ni couche JDBC.
+    WHY psycopg2 and not the Spark JDBC export: spark.createDataFrame(from a Python
+    list) spawns PYTHON WORKERS on the executors, whose version differs from the
+    driver's -> guaranteed RuntimeError. The driver runs INSIDE the Airflow container
+    which already has psycopg2: we write directly.
     """
     if not results:
         print("[dq] aucun resultat a ecrire / no result to write")
         return
-    df = spark.createDataFrame(results, schema=RESULT_SCHEMA)
-    (df.write
-      .mode("append")            # on AJOUTE l'historique / APPEND to the history
-      .format("jdbc")
-      .option("url", CONFIG["pg_url"])
-      .option("dbtable", "dq.dq_checks")
-      .option("user", CONFIG["pg_user"])
-      .option("password", CONFIG["pg_password"])
-      .option("driver", "org.postgresql.Driver")
-      .save())
-    print(f"[dq] {len(results)} resultats ecrits dans dq.dq_checks / results written")
+    import psycopg2
+    conn = psycopg2.connect(
+        host="postgres", port=5432, dbname="gold_db",
+        user=CONFIG["pg_user"], password=CONFIG["pg_password"])
+    try:
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO dq.dq_checks (run_ts, layer, table_name, check_name,"
+                " observed, expected, passed, details)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                [(r["run_ts"], r["layer"], r["table_name"], r["check_name"],
+                  r["observed"], r["expected"], r["passed"], r["details"])
+                 for r in results])
+        conn.commit()
+        print(f"[dq] {len(results)} resultats ecrits dans dq.dq_checks / results written")
+    finally:
+        conn.close()
 
 
 def main():

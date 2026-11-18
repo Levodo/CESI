@@ -15,10 +15,10 @@
 #   3. Vérifier : docker compose ps  (tous les services doivent être "healthy"/"running")
 #
 # VERIFICATION :
-#   - Airflow      : http://localhost:8180  (admin / admin)
-#       NOTE : le port 8180 et non 8080 — un logiciel local (EDB/EnterpriseDB)
+#   - Airflow      : http://localhost:8280  (admin / admin)
+#       NOTE : le port 8280 et non 8080 — un logiciel local (EDB/EnterpriseDB)
 #       occupe deja le 8080 sur cette machine (conflit verifie le 06/10/2026).
-#       NOTE: port 8180 not 8080 — a local EDB/EnterpriseDB tool already owns
+#       NOTE: port 8280 not 8080 — a local EDB/EnterpriseDB tool already owns
 #       port 8080 on this machine (conflict verified 2026-10-06).
 #   - Spark Master : http://localhost:8081
 #   - HDFS NameNode: http://localhost:9870
@@ -230,7 +230,7 @@ services:
       - ..:/opt/project:ro                   # Jobs PySpark + scripts d'ingestion
     ports:
       - "7077:7077"                        # Point d'entree des jobs (spark-submit)
-      - "8081:8080"                        # Web UI Master (decalee : 8180 = Airflow)
+      - "8081:8080"                        # Web UI Master (decalee : 8280 = Airflow)
 
   spark-worker:
     image: bde2020/spark-worker:3.3.0-hadoop3.3   # meme version que le master
@@ -337,7 +337,7 @@ services:
       - ./hive/hive-site.xml:/opt/spark/conf/hive-site.xml:ro
       - ./jars:/opt/spark/jars:ro
     ports:
-      - "8180:8080"                        # Web UI Airflow (8080 pris par un logiciel EDB local)
+      - "8280:8080"                        # Web UI Airflow (8080 pris par un logiciel EDB local)
     command: ["airflow", "webserver"]
 
   airflow-scheduler:

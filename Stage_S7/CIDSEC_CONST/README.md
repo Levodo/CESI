@@ -45,7 +45,7 @@ cd docker && docker compose up -d && docker compose ps
 docker exec cidsec-namenode hdfs dfs -ls /data
 docker exec cidsec-hive-server beeline -u jdbc:hive2://localhost:10000 -e "SHOW DATABASES;"
 
-# 3. Pipeline : à la main (étape 7 du guide) ou via Airflow (http://localhost:8180)
+# 3. Pipeline : à la main (étape 7 du guide) ou via Airflow (http://localhost:8280)
 ```
 
 ## Conventions

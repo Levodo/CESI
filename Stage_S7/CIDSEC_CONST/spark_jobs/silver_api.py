@@ -107,6 +107,15 @@ def silver_meteo(spark, table="api_meteo_sp_daily"):
               F.col("j.precipitation_sum").alias("precipitations_mm"),
               F.col("j.windspeed_10m_max").alias("vent_max_kmh"),
           ))
+    # POURQUOI dedup par jour : la Bronze peut contenir plusieurs payloads JSON
+    #            (archives successives, regle B5) ; sans dedup, les jointures
+    #            commandes x meteo multiplient les lignes.
+    # WHY dedup by day: Bronze may hold several JSON payloads; without dedup, the
+    #     orders x weather joins multiply rows.
+    df = (df.groupBy("jour", "latitude", "longitude")
+          .agg(*[F.first(c).alias(c)
+                 for c in ["temp_moy_c", "temp_max_c", "temp_min_c",
+                           "precipitations_mm", "vent_max_kmh"]]))
     df = add_technical_columns(df, source_file="openmeteo_sp_daily_2016_2018.json")
     write_table(df, DST, "meteo_quotidien", f"{CONFIG['hdfs_silver']}/api/meteo_quotidien")
 
@@ -139,6 +148,16 @@ def silver_fx(spark, table="api_taux_change"):
     # jointure avec un evenement du samedi perdrait son taux.
     # WHY: markets are closed on weekends; without backfill, any Saturday join
     # would lose its rate.
+    # POURQUOI la deduplication par jour : la Bronze peut contenir PLUSIEURS payloads
+    # JSON (archives successives du meme appel, regle B5) ; sans dedup, chaque jour
+    # apparait 3-4 fois et toute jointure multiplie les lignes (fact_trades : 49,98 M
+    # au lieu de 1,22 M, constate le 20/10/2026).
+    # WHY dedup by day: Bronze may hold SEVERAL JSON payloads (successive archives
+    # of the same call); without dedup, each day appears 3-4 times and any join
+    # multiplies rows.
+    taux_cols = ["usd_vers_brl", "usd_vers_eur", "usd_vers_gbp", "usd_vers_jpy"]
+    df = (df.groupBy("jour")
+          .agg(*[F.first(c).alias(c) for c in taux_cols]))
     bounds = df.agg(F.min("jour").alias("mn"), F.max("jour").alias("mx")).first()
     cal = spark.range(1).select(
         F.explode(F.sequence(F.lit(bounds["mn"]), F.lit(bounds["mx"]), F.expr("interval 1 day")))

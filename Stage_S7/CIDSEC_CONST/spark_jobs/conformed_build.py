@@ -40,7 +40,8 @@ sys.path.insert(0, "/opt/project/spark_jobs")  # Permet "import common" / allows
 
 from pyspark.sql import functions as F
 
-from common import CONFIG, ensure_databases, get_spark, write_table
+from common import (CONFIG, ensure_databases, get_spark, read_latest_snapshot,
+                    write_table)
 
 DST = CONFIG["db_silver"]
 
@@ -58,9 +59,9 @@ def conformed_commandes(spark):
     1 ligne = 1 COMMANDE, enrichie meteo / 1 row = 1 ORDER, weather-enriched.
     Grain : order_id (identique a fact_commande en Gold, pour comparaison directe).
     """
-    orders = spark.table(f"{DST}.olist_orders")
-    items = spark.table(f"{DST}.olist_order_items")
-    meteo = spark.table(f"{DST}.meteo_quotidien")
+    orders = read_latest_snapshot(spark, f"{DST}.olist_orders")
+    items = read_latest_snapshot(spark, f"{DST}.olist_order_items")
+    meteo = read_latest_snapshot(spark, f"{DST}.meteo_quotidien")
 
     # --- Montants par commande (agregation des lignes) / per-order amounts ----------
     # POURQUOI : le grain cible est la COMMANDE ; les lignes d'articles sont donc
@@ -116,8 +117,8 @@ def conformed_trades(spark):
     1 ligne = 1 TRADE, valorise en BRL/EUR / 1 row = 1 TRADE, valued in BRL/EUR.
     Grain : trade_report_id.
     """
-    trades = spark.table(f"{DST}.cymbal_trades")
-    fx = spark.table(f"{DST}.taux_change")
+    trades = read_latest_snapshot(spark, f"{DST}.cymbal_trades")
+    fx = read_latest_snapshot(spark, f"{DST}.taux_change")
 
     df = trades.withColumn("jour", F.col("trade_date"))
 
@@ -147,7 +148,7 @@ def conformed_energie(spark):
     """
     1 ligne = 1 PAYS x 1 JOUR / 1 row = 1 COUNTRY x 1 DAY.
     """
-    df = spark.table(f"{DST}.iot_energie_pays")
+    df = read_latest_snapshot(spark, f"{DST}.iot_energie_pays")
 
     df = (df
           .withColumn("jour", F.to_date("ts"))

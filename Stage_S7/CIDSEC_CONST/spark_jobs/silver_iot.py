@@ -71,31 +71,27 @@ def silver_opsd(spark):
     """
     cols = spark.table(f"{SRC}.opsd_time_series_60min").columns
 
-    # Version SQL du stack : plus robuste et lisible / SQL stack version: more robust and readable
-    # Stack : chaque tuple = (pays, ts, charge, prix, solaire, eolien).
-    # POURQUOI inclure ts DANS le stack : Spark refuse un generateur (stack) cote a
-    #            cote d'une autre expression dans SELECT ("expected 1 aliases",
-    #            constate le 08/10/2026). Le timestamp est donc une valeur de sortie
-    #            du stack, comme les mesures.
-    # WHY ts INSIDE the stack: Spark rejects a generator (stack) next to another
-    #      expression in SELECT ("expected 1 aliases"). The timestamp becomes a
-    #      stack output value, like the measures.
-    selects = []
+    # Version UNION ALL : un SELECT par pays, fusionnes avec unionByName.
+    # POURQUOI ne pas utiliser stack() : selon la version de pyspark/Spark, le
+    #            generateur stack() dans selectExpr est traite comme UNE SEULE colonne
+    #            ("IllegalArgumentException: Old column names (1): col0", constate le
+    #            12/10/2026). L'UNION ALL est trivial, lisible et fonctionne partout.
+    # WHY not stack(): depending on the pyspark/Spark version pair, the stack()
+    #     generator in selectExpr is treated as ONE column. UNION ALL is trivial,
+    #     readable and works everywhere (5 scans of a 50k-row table = negligible).
+    # Chaque select : (pays, ts, charge, prix, solaire, eolien).
+    dfs = []
     for c in COUNTRIES:
-        parts = []
+        exprs = [f"'{c}' AS pays", "to_timestamp(utc_timestamp) AS ts"]
         for semantic in ["charge", "prix", "solaire", "eolien"]:
             src_col = _find_col(cols, c, semantic)
-            parts.append(f"CAST({src_col} AS DOUBLE)" if src_col else "CAST(NULL AS DOUBLE)")
-        selects.append(f"('{c}', to_timestamp(utc_timestamp), {', '.join(parts)})")
+            val = f"CAST({src_col} AS DOUBLE)" if src_col else "CAST(NULL AS DOUBLE)"
+            exprs.append(f"{val} AS {semantic}")
+        dfs.append(spark.table(f"{SRC}.opsd_time_series_60min").selectExpr(*exprs))
 
-    long_df = spark.table(f"{SRC}.opsd_time_series_60min").selectExpr(
-        f"stack({len(COUNTRIES)}, {', '.join(selects)})",
-    ).toDF("pays", "ts", "charge", "prix", "solaire", "eolien")
-    # POURQUOI toDF et pas "AS (pays, ts, ...)" : Spark n'accepte PAS l'aliasage
-    #            multi-colonnes d'un generateur dans SELECT ("expected 1 aliases",
-    #            2e constat le 08/10/2026). Le stack sort col1..colN, on renomme apres.
-    # WHY toDF and not "AS (pays, ts, ...)": Spark does NOT accept multi-column
-    #     aliasing of a generator in SELECT. stack outputs col1..colN, we rename after.
+    long_df = dfs[0]
+    for d in dfs[1:]:
+        long_df = long_df.unionByName(d)
 
     # B1 : comblement des trous isoles (moyenne des voisins) sur chaque serie pays
     # B1 : fill isolated gaps (neighbor average) on each country series
@@ -130,10 +126,17 @@ def silver_uci(spark):
     for c in num_cols:
         df = df.withColumn(c, F.regexp_replace(F.col(c), ",", ".").cast("double"))
 
-    # Horodatage = date (jj/mm/aaaa) + heure / timestamp = date + time
+    # Horodatage = date (j/m/aaaa) + heure / timestamp = date + time
+    # POURQUOI "d/M/yyyy" et pas "dd/MM/yyyy" : le fichier UCI contient des dates a
+    #            CHIFFRE UNIQUE ("1/1/2010") ; le parseur strict de Spark 3 refuse
+    #            "dd/MM/yyyy" sur ces valeurs (DateTimeParseException, constate le
+    #            13/10/2026). "d" et "M" acceptent 1 ou 2 chiffres.
+    # WHY "d/M/yyyy" not "dd/MM/yyyy": the UCI file contains SINGLE-DIGIT dates
+    #     ("1/1/2010"); Spark 3's strict parser rejects "dd/MM/yyyy" on those.
+    #     "d" and "M" accept 1 or 2 digits.
     df = df.withColumn(
         "ts",
-        F.to_timestamp(F.concat_ws(" ", F.col("date"), F.col("time")), "dd/MM/yyyy HH:mm:ss"),
+        F.to_timestamp(F.concat_ws(" ", F.col("date"), F.col("time")), "d/M/yyyy HH:mm:ss"),
     )
 
     total = df.count()

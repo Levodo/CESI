@@ -117,6 +117,16 @@ def silver_reviews(spark):
           .withColumn("_rn", F.row_number().over(w))
           .filter(F.col("_rn") == 1)                    # deduplication A4
           .drop("_rn"))
+
+    # --- A14 : scores hors bornes (controle qualite du 21/10/2026) ------------------
+    # 3 avis ont un score hors [1,5] dans la source (0 x2, 90 x1) -> mis a NULL
+    # (un score invalide ne doit ni fausser les moyennes ni passer les controles).
+    # A14: out-of-range scores (2 x '0', 1 x '90' measured in the source) -> set to
+    # NULL (an invalid score must not skew averages nor pass quality checks).
+    df = df.withColumn("_dq_flag",
+                       F.when(~F.col("review_score").between(1, 5), F.lit("score_invalide")))
+    df = df.withColumn("review_score",
+                       F.when(F.col("review_score").between(1, 5), F.col("review_score")))
     write_table(df, DST, "olist_order_reviews", f"{CONFIG['hdfs_silver']}/olist/order_reviews")
 
 

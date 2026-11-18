@@ -88,6 +88,15 @@ def get_spark(app_name: str) -> SparkSession:
         .appName(app_name)
         .enableHiveSupport()
         .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
+        # POURQUOI metastorePartitionPruning=false : le parseur de filtres du
+        #            metastore Hive REJETE les colonnes commencant par "_" ("Error
+        #            parsing partition filter ... no viable alternative at character
+        #            '_'", constate le 20/10/2026 sur read_latest_snapshot). Avec
+        #            false, Spark liste les partitions et filtre lui-meme.
+        # WHY metastorePartitionPruning=false: Hive metastore's filter parser REJECTS
+        #     column names starting with "_". With false, Spark lists partitions and
+        #     filters them itself.
+        .config("spark.sql.hive.metastorePartitionPruning", "false")
         .getOrCreate()
     )
 
@@ -149,6 +158,27 @@ def add_technical_columns(df: DataFrame, source_file: str, load_date: str = None
         "_record_hash",
         F.md5(F.concat_ws("||", *[F.coalesce(F.col(c).cast(T.StringType()), F.lit("")) for c in business_cols])),
     )
+    return df
+
+
+def read_latest_snapshot(spark: SparkSession, table_name: str) -> DataFrame:
+    """
+    Lit la DERNIERE partition _load_date d'une table / read the table's LATEST partition.
+
+    POURQUOI / WHY :
+      Chaque execution journaliere AJOUTE une partition _load_date (historisation
+      Bronze/Silver). Lire la table entiere cumule donc les snapshots : fact_commande
+      affichait 1 591 056 lignes au lieu de 99 441 (16 executions, constate le
+      20/10/2026). Les couches aval (conformed, gold) ne doivent consommer que le
+      DERNIER etat connu.
+      Each daily run ADDS a _load_date partition (history). Reading the whole table
+      stacks snapshots. Downstream layers must consume only the LATEST known state.
+    """
+    df = spark.table(table_name)
+    if "_load_date" in df.columns:
+        mx = df.agg(F.max("_load_date")).first()[0]
+        if mx is not None:
+            df = df.where(F.col("_load_date") == mx)
     return df
 
 

@@ -39,7 +39,8 @@ sys.path.insert(0, "/opt/project/spark_jobs")
 
 from pyspark.sql import functions as F
 
-from common import (CONFIG, ensure_databases, get_spark, write_postgres, write_table)
+from common import (CONFIG, ensure_databases, get_spark, read_latest_snapshot,
+                    write_postgres, write_table)
 
 SRC = CONFIG["db_silver"]
 DST = CONFIG["db_gold"]
@@ -75,35 +76,35 @@ def dim_date(spark):
 
 def dim_client(spark):
     """1 ligne = 1 CLIENT / 1 row = 1 CUSTOMER. Cle = customer_id."""
-    df = spark.table(f"{SRC}.olist_customers")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_customers")
     write_table(df, DST, "dim_client", f"{CONFIG['hdfs_gold']}/dim_client")
     return df
 
 
 def dim_produit(spark):
     """1 ligne = 1 PRODUIT / 1 row = 1 PRODUCT. Cle = product_id (categories A1-A3 deja appliquees)."""
-    df = spark.table(f"{SRC}.olist_products")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_products")
     write_table(df, DST, "dim_produit", f"{CONFIG['hdfs_gold']}/dim_produit")
     return df
 
 
 def dim_vendeur(spark):
     """1 ligne = 1 VENDEUR / 1 row = 1 SELLER. Cle = seller_id."""
-    df = spark.table(f"{SRC}.olist_sellers")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_sellers")
     write_table(df, DST, "dim_vendeur", f"{CONFIG['hdfs_gold']}/dim_vendeur")
     return df
 
 
 def dim_geographie(spark):
     """1 ligne = 1 CODE POSTAL / 1 row = 1 ZIP CODE (coordonnees moyennes, regle A7)."""
-    df = spark.table(f"{SRC}.olist_geolocation")
+    df = read_latest_snapshot(spark, f"{SRC}.olist_geolocation")
     write_table(df, DST, "dim_geographie", f"{CONFIG['hdfs_gold']}/dim_geographie")
     return df
 
 
 def dim_pays(spark):
     """1 ligne = 1 PAYS du reseau energetique / 1 row = 1 energy-network COUNTRY."""
-    df = (spark.table(f"{SRC}.iot_energie_pays")
+    df = (read_latest_snapshot(spark, f"{SRC}.iot_energie_pays")
           .select("pays").distinct()
           .withColumn("nom_pays", F.when(F.col("pays") == "AT", F.lit("Autriche"))
                                    .when(F.col("pays") == "BE", F.lit("Belgique"))
@@ -135,10 +136,10 @@ def fact_commande(spark):
                          montant_paye, delai_livraison_jours, is_late, review_score
     Cles etrangeres / foreign keys : customer_id, jour_achat (-> dim_date)
     """
-    orders = spark.table(f"{SRC}.olist_orders")
-    items = spark.table(f"{SRC}.olist_order_items")
-    payments = spark.table(f"{SRC}.olist_order_payments")
-    reviews = spark.table(f"{SRC}.olist_order_reviews")
+    orders = read_latest_snapshot(spark, f"{SRC}.olist_orders")
+    items = read_latest_snapshot(spark, f"{SRC}.olist_order_items")
+    payments = read_latest_snapshot(spark, f"{SRC}.olist_order_payments")
+    reviews = read_latest_snapshot(spark, f"{SRC}.olist_order_reviews")
 
     items_agg = (items.groupBy("order_id").agg(
         F.round(F.sum("price"), 2).alias("montant_articles"),
@@ -180,18 +181,30 @@ def fact_trades(spark):
     Coherence rule: join with the taux_change table (Silver API) on the trade date
     -> each trade is valued in its market currency AND in EUR.
     """
-    trades = spark.table(f"{SRC}.cymbal_trades")
-    fx = spark.table(f"{SRC}.taux_change").select("jour", "usd_vers_eur", "usd_vers_brl")
+    trades = read_latest_snapshot(spark, f"{SRC}.cymbal_trades")
+    fx = read_latest_snapshot(spark, f"{SRC}.taux_change").select("jour", "usd_vers_eur", "usd_vers_brl")
 
     df = (trades
           .join(fx, trades["trade_date"] == fx["jour"], "left")
           .select(
-              "tradereportid", "order_id", "symbol", "side", "partyid",
+              # Nommage Gold en snake_case : les colonnes Silver gardent les noms
+              # d'origine (tradereportid, orderid) normalises par la Bronze.
+              # Gold naming in snake_case: Silver columns keep original names
+              # (tradereportid, orderid) normalized by Bronze.
+              F.col("tradereportid").alias("trade_report_id"),
+              F.col("orderid").alias("order_id"),
+              "symbol", "side", "partyid",
               "trade_date", "sending_time", "transact_time",
-              "quantity", "last_px", "strike_price",
-              F.round(F.col("last_px") * F.col("quantity"), 2).alias("valeur_usd"),
-              F.round(F.col("last_px") * F.col("quantity") * F.col("usd_vers_eur"), 2).alias("valeur_eur"),
-              F.round(F.col("last_px") * F.col("quantity") * F.col("usd_vers_brl"), 2).alias("valeur_brl"),
+              # A13 : "quantity" etait CONSTANTE (=1) et retiree en Silver ;
+              #       on la reconstitue explicitement pour garder la formule de
+              #       valorisation lisible (valeur = prix x quantite).
+              # A13: "quantity" was CONSTANT (=1) and dropped in Silver; we rebuild
+              #      it explicitly to keep the valuation formula readable.
+              F.lit(1).alias("quantite"),
+              "last_px", "strike_price",
+              F.round(F.col("last_px") * F.lit(1), 2).alias("valeur_usd"),
+              F.round(F.col("last_px") * F.lit(1) * F.col("usd_vers_eur"), 2).alias("valeur_eur"),
+              F.round(F.col("last_px") * F.lit(1) * F.col("usd_vers_brl"), 2).alias("valeur_brl"),
           ))
     write_table(df, DST, "fact_trades", f"{CONFIG['hdfs_gold']}/fact_trades")
     return df
@@ -202,7 +215,7 @@ def fact_energie_jour(spark):
     1 ligne = 1 PAYS x 1 JOUR / 1 row = 1 COUNTRY x 1 DAY (grain: pays + jour).
     Mesures : charge moyenne/max, prix moyen, production solaire/eolienne cumulee.
     """
-    df = (spark.table(f"{SRC}.iot_energie_pays")
+    df = (read_latest_snapshot(spark, f"{SRC}.iot_energie_pays")
           .withColumn("jour", F.to_date("ts"))
           .groupBy("pays", "jour")
           .agg(
@@ -221,7 +234,7 @@ def fact_foyer_jour(spark):
     1 ligne = 1 JOUR pour le foyer capte / 1 row = 1 DAY for the monitored household.
     Mesures : consommation moyenne/max, sous-compteurs (cuisine, buanderie, clim).
     """
-    df = spark.table(f"{SRC}.iot_foyer_1j").select(
+    df = read_latest_snapshot(spark, f"{SRC}.iot_foyer_1j").select(
         F.col("jour"), "puissance_active_moy_kw", "puissance_active_max_kw",
         "sous_compteur_1_kwh", "sous_compteur_2_kwh", "sous_compteur_3_kwh", "nb_mesures")
     write_table(df, DST, "fact_foyer_jour", f"{CONFIG['hdfs_gold']}/fact_foyer_jour")
@@ -273,16 +286,16 @@ def main():
     # --- PostgreSQL export (Spark JDBC): Power BI entry door ----------------------
     print("[gold] === export JDBC vers PostgreSQL / JDBC export to PostgreSQL ===")
     for table, df in [
-        ("dim_date", spark.table(f"{DST}.dim_date")),
-        ("dim_client", spark.table(f"{DST}.dim_client")),
-        ("dim_produit", spark.table(f"{DST}.dim_produit")),
-        ("dim_vendeur", spark.table(f"{DST}.dim_vendeur")),
-        ("dim_geographie", spark.table(f"{DST}.dim_geographie")),
-        ("dim_pays", spark.table(f"{DST}.dim_pays")),
+        ("dim_date", read_latest_snapshot(spark, f"{DST}.dim_date")),
+        ("dim_client", read_latest_snapshot(spark, f"{DST}.dim_client")),
+        ("dim_produit", read_latest_snapshot(spark, f"{DST}.dim_produit")),
+        ("dim_vendeur", read_latest_snapshot(spark, f"{DST}.dim_vendeur")),
+        ("dim_geographie", read_latest_snapshot(spark, f"{DST}.dim_geographie")),
+        ("dim_pays", read_latest_snapshot(spark, f"{DST}.dim_pays")),
         ("fact_commande", fc),
-        ("fact_trades", spark.table(f"{DST}.fact_trades")),
-        ("fact_energie_jour", spark.table(f"{DST}.fact_energie_jour")),
-        ("fact_foyer_jour", spark.table(f"{DST}.fact_foyer_jour")),
+        ("fact_trades", read_latest_snapshot(spark, f"{DST}.fact_trades")),
+        ("fact_energie_jour", read_latest_snapshot(spark, f"{DST}.fact_energie_jour")),
+        ("fact_foyer_jour", read_latest_snapshot(spark, f"{DST}.fact_foyer_jour")),
         ("kpi_ca_quotidien", kpi),
     ]:
         write_postgres(df, table)
