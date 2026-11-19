@@ -25,7 +25,7 @@ planned by the contract:*
 |---|---|---|---|
 | 1 | Prédiction des retards de livraison / Delivery delay prediction | **XGBoost** (classification) | ✅ **Fait / Done** |
 | 2 | Prévision du CA par catégories / Revenue forecast by category | **Prophet** (séries temporelles) | ✅ **Fait / Done** |
-| 3 | Prévision de consommation électrique IoT / IoT power consumption forecast | Prophet / XGBoost | 📋 À faire / To do |
+| 3 | Prévision de consommation électrique IoT / IoT power consumption forecast | Prophet (séries temporelles) | ✅ **Fait / Done** |
 | 4 | Green Book ML (colonnes exploitables) / ML Green Book (usable columns) | document | ✅ **Fait / Done** (section 5) |
 | 5 | Monitoring (importance des variables, variance) / Monitoring (feature importance, variance) | tables + doc | ✅ **Fait / Done** (section 6) |
 | 6 | Orchestration `dag_07_ml_train` / Orchestration | Airflow | 📋 À faire / To do |
@@ -215,12 +215,55 @@ docker exec cidsec-postgres psql -U spark -d gold_db -c \
 
 ---
 
-## 5. Modèle 3 — Prévision IoT (à faire) / Model 3 — IoT forecast (to do)
+## 5. Modèle 3 — Prévision IoT (consommation électrique) / Model 3 — IoT power forecast
 
-**Prévu / planned** : prévision de la consommation électrique (`uci_household_power`,
-`opsd_time_series`) par Prophet ou XGBoost sur variables dérivées (lags, calendrier).
-Livrable : `ml/train_forecast_iot.py` + tables `gold.ml_forecast_iot*`.
-*Forecast power consumption using Prophet or XGBoost on derived features (lags, calendar).*
+### 5.1 Pourquoi / WHY
+Anticiper la demande électrique (dimensionnement, achat d'énergie) sur les deux jeux IoT
+disponibles en Silver : le foyer UCI (télémétrie minute) et les pays européens OPSD.
+*Anticipate power demand (sizing, energy purchasing) on both IoT datasets in Silver.*
+
+### 5.2 Données / Data
+- `silver_db.iot_foyer_1j` — consommation journalière du foyer (somme des 3
+  sous-compteurs, kWh/j), ~1 430 jours.
+- `silver_db.iot_energie_pays` — charge électrique horaire par pays, agrégée en
+  **moyenne journalière** ; 4 séries retenues : FOYER_UCI + PAYS_AT + PAYS_BE + PAYS_DE
+  (~2 101 jours chacune).
+
+### 5.3 Méthode / Method
+Identique au modèle 2 (cohérence) : 30 jours de test, Prophet (hebdo + annuelle,
+multiplicative), horizon 90 jours, métriques **WAPE (référence)** / MAPE / MAE contre
+2 baselines (veille + saison). Règle **B1** appliquée : les jours sans mesure sont
+retirés et signalés dans les logs.
+
+### 5.4 Résultats mesurés / Measured results (exécution du 19/11/2026)
+
+| Série | WAPE (réf.) | MAE modèle | MAE baseline saison | Bat la baseline ? |
+|---|---|---|---|---|
+| **PAYS_AT** (Autriche) | **1,62 %** | 104 | 450 | ✅ **×4 mieux** |
+| **PAYS_BE** (Belgique) | **3,44 %** | 311 | 508 | ✅ ×1,6 mieux |
+| **PAYS_DE** (Allemagne) | **3,83 %** | 2 018 | 3 478 | ✅ ×1,7 mieux |
+| FOYER_UCI | 33,5 % | 4 240 | 5 091 | ✅ (+17 %) |
+
+**Lecture / reading** : les séries pays (régulières, ~4 300 MW de charge) sont **très
+bonnes** (WAPE < 4 %) — la saisonnalité Prophet capture la demande électrique. Le foyer
+UCI (comportement humain, ~33 % de WAPE) est plus chaotique mais **bat quand même sa
+baseline de 17 %**. Les 4 séries battent leur baseline saisonnière. ✅
+
+### 5.5 Tables produites / Output tables
+| Table | Contenu / Content |
+|---|---|
+| `gold.ml_forecast_iot` | 7 973 lignes : historique ajusté + 90 jours prévus par série |
+| `gold.ml_forecast_iot_metriques` | WAPE / MAPE / MAE / baselines par série |
+| `ml/modeles/forecast_iot_<serie>.json` | Modèles Prophet sérialisés |
+
+### 5.6 Rejouer à la main / Replay by hand
+```bash
+docker exec cidsec-airflow-sched python /opt/project/ml/train_forecast_iot.py
+
+# Vérifier / verify :
+docker exec cidsec-postgres psql -U spark -d gold_db -c \
+  "SELECT serie, wape_test_pct, mae_test, baseline_mae_saison FROM gold.ml_forecast_iot_metriques ORDER BY wape_test_pct;"
+```
 
 ---
 
@@ -244,7 +287,8 @@ Livrable : `ml/train_forecast_iot.py` + tables `gold.ml_forecast_iot*`.
 | 19/11/2026 | Modèle 1 | `ml/train_pred_retard.py` — entraîné, validé (AUC 0,73), 3 tables écrites, modèle sauvegardé |
 | 19/11/2026 | Environnement | `ml/requirements.txt` + shim numpy ; volume `../ml` ajouté au compose (rw) |
 | 19/11/2026 | Modèle 2 | `ml/train_forecast_ca.py` — 6 séries (TOTAL + top 5 catégories), 90 jours prévus, 3 943 lignes écrites ; WAPE ~36-74 % ; le modèle bat la baseline saisonnière sur les grandes séries (voir 4.5) |
-| 19/11/2026 | Documentation | Ce document créé puis complété avec les résultats réels des modèles 1 et 2 |
+| 19/11/2026 | Modèle 3 | `ml/train_forecast_iot.py` — 4 séries (FOYER_UCI + AT/BE/DE), 7 973 lignes écrites ; WAPE 1,6-33,5 % ; **les 4 séries battent leur baseline saisonnière** (voir 5.4) |
+| 19/11/2026 | Documentation | Ce document créé puis complété avec les résultats réels des modèles 1, 2 et 3 |
 
 ---
 

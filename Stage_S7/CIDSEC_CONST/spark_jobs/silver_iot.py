@@ -56,12 +56,29 @@ def _find_col(columns, country, semantic):
     Pattern matching instead of hard-coded names -> the job survives source changes.
     """
     patterns = {
-        "charge": f"{country}_load_actual_entsoe_transparency",
+        "charge": f"{country}_load_actual",
         "prix": f"{country}_price_day_ahead",
         "solaire": f"{country}_solar_generation_actual",
         "eolien": f"{country}_wind_onshore_generation_actual",
     }
-    return patterns[semantic] if patterns[semantic] in columns else None
+    # POURQUOI la comparaison en minuscules : normalize_column_names() met les colonnes
+    #            source en minuscules (at_load_actual) alors que le motif est construit
+    #            avec le pays en majuscules (AT_load_actual) — la comparaison exacte ne
+    #            trouvait JAMAIS la colonne -> charge/prix/etc. toujours NULL (constate
+    #            le 19/11/2026, regle B4). On compare donc en insensible a la casse.
+    # WHY lowercase comparison: normalize_column_names() lowercases the source columns
+    #     (at_load_actual) while the pattern uses uppercase country codes
+    #     (AT_load_actual) — exact comparison NEVER found the column -> charge/price/
+    #     etc. always NULL (observed on 19/11/2026, rule B4). Compare case-insensitively.
+    col_recherchee = patterns[semantic].lower()
+    exact, prefixe = None, None
+    for col in columns:
+        cl = col.lower()
+        if cl == col_recherchee:
+            exact = col                       # nom exact / exact name
+        elif cl.startswith(col_recherchee) and prefixe is None:
+            prefixe = col                     # variante (ex: ..._entsoe_transparency)
+    return exact or prefixe
 
 
 def silver_opsd(spark):
