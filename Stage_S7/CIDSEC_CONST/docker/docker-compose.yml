@@ -329,6 +329,7 @@ services:
       - ../ingestion:/opt/project/ingestion:ro
       - ../sql:/opt/project/sql:ro
       - ../data_quality:/opt/project/data_quality:ro
+      - ../ml:/opt/project/ml:rw            # scripts + modeles ML Phase 3 (rw = sauvegarde des modeles entraines / trained models saved here)
       - ../Données:/landing:ro
       - ./data/landing_api:/landing_api
       - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
@@ -362,6 +363,7 @@ services:
       - ../ingestion:/opt/project/ingestion:ro
       - ../sql:/opt/project/sql:ro
       - ../data_quality:/opt/project/data_quality:ro
+      - ../ml:/opt/project/ml:rw            # scripts + modeles ML Phase 3 (rw = sauvegarde des modeles entraines / trained models saved here)
       - ../Données:/landing:ro
       - ./data/landing_api:/landing_api
       - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro

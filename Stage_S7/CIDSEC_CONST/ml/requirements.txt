@@ -1,0 +1,15 @@
+# ml/requirements.txt — dépendances ML de la Phase 3 / Phase 3 ML dependencies
+# ================================================================================
+# POURQUOI ce fichier : les paquets Python installés dans un conteneur disparaissent à
+#            chaque recréation du conteneur (couche éphémère). Ce fichier permet de les
+#            réinstaller en UNE commande (voir ml/install_deps.sh).
+# WHY this file: Python packages installed inside a container disappear every time the
+#      container is recreated (ephemeral layer). This file allows reinstalling them with
+#      ONE command (see ml/install_deps.sh).
+#
+# Utilisation / usage (depuis Windows, à la racine du projet) :
+#   docker exec cidsec-airflow-sched python -m pip install --quiet -r /opt/project/ml/requirements.txt
+xgboost==2.1.4
+scikit-learn==1.3.2
+pandas==2.0.3
+prophet==1.1.6
