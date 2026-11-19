@@ -28,7 +28,7 @@ planned by the contract:*
 | 3 | Prévision de consommation électrique IoT / IoT power consumption forecast | Prophet (séries temporelles) | ✅ **Fait / Done** |
 | 4 | Green Book ML (colonnes exploitables) / ML Green Book (usable columns) | document | ✅ **Fait / Done** (section 5) |
 | 5 | Monitoring (importance des variables, variance) / Monitoring (feature importance, variance) | tables + doc | ✅ **Fait / Done** (section 6) |
-| 6 | Orchestration `dag_07_ml_train` / Orchestration | Airflow | 📋 À faire / To do |
+| 6 | Orchestration `dag_07_ml_train` / Orchestration | Airflow | ✅ **Fait / Done** |
 
 **Flux des données / data flow** :
 
@@ -267,6 +267,34 @@ docker exec cidsec-postgres psql -U spark -d gold_db -c \
 
 ---
 
+## 6 bis. Orchestration Airflow — `dag_07_ml_train` / Airflow orchestration
+
+**Pourquoi / WHY** : les 3 modèles doivent être ré-entraînés **sans intervention
+humaine**. Le DAG les lance en parallèle chaque dimanche à 06:00, puis vérifie que les
+7 tables `ml_*` sont bien présentes dans PostgreSQL (contrôle de fumée).
+*The 3 models must be retrained **without human intervention**. The DAG runs them in
+parallel every Sunday at 06:00, then verifies the 7 `ml_*` tables exist in PostgreSQL.*
+
+**Comment / how** :
+- 3 tâches **indépendantes** en parallèle (commandes `python` identiques à la
+  validation manuelle) → contrôle final (`ml_controle_tables`, PythonOperator + psycopg2).
+- `max_active_runs=1` : **règle anti-SIGTERM** — deux runs simultanés × 3 tâches = 6
+  tâches actives, au-delà de la limite connue (3) qui fait tuer les jobs par le
+  scheduler (constaté le 19/11/2026 lors de la première exécution, corrigé).
+- Limite connue : **3 tâches actives simultanées max** (réglage projet documenté).
+
+**Validation / validated** (run manuel du 19/11/2026) : `ml_pred_retard ✅`,
+`ml_forecast_ca ✅`, `ml_forecast_iot ✅`, `ml_controle_tables ✅` — **4/4 vert**.
+
+**Rejouer à la main / replay by hand** :
+```bash
+docker exec cidsec-airflow-sched airflow dags trigger dag_07_ml_train
+docker exec cidsec-airflow-sched airflow dags list-runs -d dag_07_ml_train -o plain
+# UI Airflow : http://localhost:8280 — onglet DAGs → dag_07_ml_train
+```
+
+---
+
 ## 6. Monitoring & explication de la variance / Monitoring & variance explanation
 
 - **Importance des variables** : table `gold.ml_pred_retard_importance` (gain) — les 5
@@ -287,8 +315,9 @@ docker exec cidsec-postgres psql -U spark -d gold_db -c \
 | 19/11/2026 | Modèle 1 | `ml/train_pred_retard.py` — entraîné, validé (AUC 0,73), 3 tables écrites, modèle sauvegardé |
 | 19/11/2026 | Environnement | `ml/requirements.txt` + shim numpy ; volume `../ml` ajouté au compose (rw) |
 | 19/11/2026 | Modèle 2 | `ml/train_forecast_ca.py` — 6 séries (TOTAL + top 5 catégories), 90 jours prévus, 3 943 lignes écrites ; WAPE ~36-74 % ; le modèle bat la baseline saisonnière sur les grandes séries (voir 4.5) |
-| 19/11/2026 | Modèle 3 | `ml/train_forecast_iot.py` — 4 séries (FOYER_UCI + AT/BE/DE), 7 973 lignes écrites ; WAPE 1,6-33,5 % ; **les 4 séries battent leur baseline saisonnière** (voir 5.4) |
-| 19/11/2026 | Documentation | Ce document créé puis complété avec les résultats réels des modèles 1, 2 et 3 |
+| 19/11/2026 | Modèle 3 | `ml/train_forecast_iot.py` — 4 séries (FOYER_UCI + PAYS_AT/BE/DE), 7 973 lignes écrites ; WAPE 1,6-33,5 % ; **les 4 séries battent leur baseline saisonnière** (voir 5.4) |
+| 19/11/2026 | Orchestration | `dags/dag_07_ml_train.py` — 3 modèles en parallèle (dimanche 06:00) + contrôle de fumée PostgreSQL ; validé 4/4 vert ; règle `max_active_runs=1` (anti-SIGTERM) |
+| 19/11/2026 | Documentation | Ce document créé puis complété avec les résultats réels des modèles 1, 2, 3 et l'orchestration |
 
 ---
 
