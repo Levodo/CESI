@@ -19,14 +19,15 @@ conception et mise en œuvre d'un pipeline de données de bout en bout
 
 | Dossier | Contenu | État |
 |---|---|---|
-| `docs/` | 01 Audit · 02 Architecture · 03 Plan · 04 Guide d'installation | ✅ |
-| `docker/` | `docker-compose.yml` (11 services), configs Hadoop/Hive/Spark, `init-hdfs.sh`, image Airflow enrichie (Java + PySpark) | ✅ |
-| `spark_jobs/` | Jobs PySpark : `bronze_ingest`, `silver_olist`, `silver_cymbal`, `silver_iot`, `silver_api`, `gold_build` + `common` | ✅ |
-| `dags/` | DAGs Airflow : `dag_01_ingest_bronze`, `dag_04_silver_transform`, `dag_05_gold_build` | ✅ |
+| `docs/` | 01 Audit · 02 Architecture · 03 Plan · 04 Guide d'installation · 06 Phase 3 ML · 07 Guide Power BI | ✅ |
+| `docker/` | `docker-compose.yml` (13 services), configs Hadoop/Hive/Spark, `init-hdfs.sh`, image Airflow enrichie (Java + PySpark) | ✅ |
+| `spark_jobs/` | Jobs PySpark : `bronze_ingest`, `silver_olist`, `silver_cymbal`, `silver_iot`, `silver_api`, `conformed_build`, `gold_build`, `data_quality/checks` + `common` | ✅ |
+| `dags/` | DAGs Airflow : `dag_01_ingest_bronze`, `dag_04_silver_transform`, `dag_05_gold_build`, `dag_06_data_quality`, `dag_07_ml_train` | ✅ |
+| `ml/` | Phase 3 ML : `train_pred_retard` (XGBoost), `train_forecast_ca` (Prophet), `train_forecast_iot` (Prophet), `requirements.txt`, `modeles/` | ✅ |
 | `ingestion/` | Scripts API REST (Open-Meteo, Frankfurter) — Python pur, exécutables à la main | ✅ |
-| `sql/` | Vues Hive (`01_views_silver.hql`) + DDL PostgreSQL (`01_gold_ddl.sql`) | ✅ |
-| `data_quality/` | Contrôles qualité + alertes | 🔜 phase 4 |
-| `powerbi/` | Rapport Power BI | 🔜 phase 4 |
+| `sql/` | Vues Hive (`01_views_silver.hql`) + DDL PostgreSQL (`01_gold_ddl.sql`, `02_dq_ddl.sql`, `03_powerbi_views.sql`) | ✅ |
+| `powerbi/` | Livrable `CIDSEC.pbix` — à construire via `docs/07_powerbi_guide.md` (guide pas-à-pas) | 📋 |
+| `data_quality/` | Contrôles qualité (41 contrôles, 6 familles) + alertes — `checks.py`, `dag_06` | ✅ |
 | `Données/` | Sources locales (non versionnées) | ✅ |
 
 ## Démarrage rapide
