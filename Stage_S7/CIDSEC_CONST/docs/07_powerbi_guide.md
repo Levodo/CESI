@@ -27,6 +27,28 @@ plateforme Docker du projet qui tourne (les conteneurs `cidsec-postgres`).
 
 ---
 
+## 0 bis. Feuille de route — le parcours en 8 étapes / Roadmap — the 8-step journey
+
+> Pour ne jamais se perdre : voici **l'ordre exact** des étapes et le temps de chacune.
+> *Never get lost: the exact order of steps and the time for each.*
+
+| Étape | Quoi | Temps | Section |
+|---|---|---|---|
+| 1 | Installer Power BI Desktop | 5 min (1 fois) | §1 |
+| 2 | Installer le pilote psqlODBC | 5 min (1 fois) | §2.1 |
+| 3 | Créer le DSN `CIDSEC` (Test + **Save**) | 3 min (1 fois) | §2.2 |
+| 4 | Connecter Power BI au DSN + charger les 7 tables | 3 min | §2.3 + §3 |
+| 5 | Créer les 7 mesures DAX (coller les formules) | 10 min | §5 |
+| 6 | Construire les 6 pages (1 visuel à la fois) | 25 min | §6 |
+| 7 | Vérifier les chiffres (tableau de contrôle) | 3 min | §8 |
+| 8 | Enregistrer `powerbi/CIDSEC.pbix` | 1 min | §7 |
+
+**Règle d'or** : à chaque étape, **vérifiez avant de continuer** (Test réussi, chiffres
+conformes…). Si blocage → §9 Dépannage (14 erreurs connues et leurs solutions).
+*Golden rule: verify at each step before continuing. If stuck → §9 Troubleshooting.*
+
+---
+
 ## 1. Installer Power BI Desktop / Install Power BI Desktop
 
 1. Ouvrir le **Microsoft Store** sur Windows.
@@ -203,12 +225,54 @@ Taux Qualite % = AVERAGE ( vue_pbi_qualite[taux_reussite_pct] )
 
 ---
 
+### 5.3 Si une mesure affiche « (Vide) » — diagnostic en 2 mesures / If a measure shows blank
+
+Une mesure « (Vide) » = elle renvoie BLANK. Deux causes : la **table est vide** dans le
+modèle (mal chargée) ou le **dénominateur est à 0**. On tranche avec 2 mesures de test :
+
+1. Créer une mesure `Test Nb = COUNTROWS ( fact_commande )` → poser en **Carte**.
+   - Doit afficher **99 441** → si 0 ou (Vide) : la table n'est pas chargée →
+     **Obtenir des données → ODBC → CIDSEC → cocher `fact_commande` → Charger**.
+2. Créer une mesure `Test Val = MAX ( fact_commande[is_late] )` → poser en **Carte**.
+   - Affiche la **valeur texte réelle** de `is_late` (`True`, `t`, `1`…) : si elle
+     diffère de `true`, adapter la mesure 3 (`Lower(...) IN {...}`) avec cette valeur.
+3. Une fois le problème réglé, **supprimer les 2 mesures de test** (clic droit →
+   Supprimer).
+
+---
+
 ## 6. Les 6 pages du rapport / The 6 report pages
 
 **Créer un visuel** : dans le volet **Visualisations** (droite), cliquer l'icône du
 visuel (ex. **Carte**) → un visuel vide apparaît sur le canevas → cocher le champ ou la
 mesure dans le volet **Données** → il se remplit. Pour les graphiques : glisser les
 champs dans les puits « Axe » et « Valeurs ».
+
+### 6.0 Tutoriel — votre premier visuel, clic par clic / First visual, click by click
+
+> Exemple complet avec la carte `CA Total` — les autres visuels suivent la même logique.
+> *Full example with the `CA Total` card — other visuals follow the same logic.*
+
+1. **Créer la page** : en bas de l'écran, à droite de l'onglet existant, cliquer sur
+   **« + »** → un nouvel onglet apparaît → **double-clic** dessus → taper `Synthèse` →
+   Entrée.
+2. **Créer le visuel vide** : à droite, volet **Visualisations** (icône graphique) →
+   cliquer l'icône **« Carte »** (un rectangle avec « 123 »). Un cadre vide gris
+   apparaît sur la page.
+3. **Remplir le visuel** : volet **Données** (tout à droite) → trouver la mesure
+   `CA Total` (avec l'icône de calculatrice 📐) → **cocher la case** → le chiffre
+   s'affiche dans la carte 🎉.
+4. **Déplacer / redimensionner** : cliquer la carte → elle est encadrée de poignées
+   blanches → la **glisser** où vous voulez, tirer les coins pour l'agrandir.
+5. **Formater** *(optionnel)* : volet Visualisations → onglet **« Mise en forme »**
+   (roue crantée) → **Titre de la carte** → modifier le texte ; **Unité d'affichage** →
+   « Aucune » pour voir le chiffre complet (ex. `15 843 553` au lieu de `15,84M`).
+6. **Répéter** : visualisations → **+ Carte** → cocher `Nb Commandes` → etc.
+
+**Pour un graphique (ex. page 2)** : cliquer l'icône **Graphique à barres** → puis
+**glisser-déposer** les champs du volet Données vers les puits en bas du volet
+Visualisations : `ca_ajuste` → **Valeurs**, `categorie` → **Axe**. Le graphique se
+dessine immédiatement.
 
 ### Page 1 — « Synthèse »
 | Visuel | Champs |
